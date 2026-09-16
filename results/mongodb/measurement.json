@@ -2854,12 +2854,13 @@
       }
     }
   ],
-  "measuredAt": "2026-09-04T13:03:15.678Z",
+  "measuredAt": "2026-09-16T08:30:45.075Z",
   "serverName": "MongoDB MCP Server",
   "serverVersion": "2.1.1",
   "launchCommand": "npx -y mongodb-mcp-server",
   "envVarNames": [],
   "serverInstructions": "\n            This is the MongoDB MCP server.\n        ",
+  "negotiatedProtocolVersion": "2025-06-18",
   "isolation": {
     "docker": true,
     "image": "public.ecr.aws/docker/library/node:22-slim",
@@ -2867,5 +2868,6 @@
     "note": "network enabled for package fetch; clean FS, no host credentials",
     "arch": "linux/amd64"
   },
-  "timeoutMs": 240000
+  "timeoutMs": 240000,
+  "requestedProtocolVersion": "2025-06-18"
 }

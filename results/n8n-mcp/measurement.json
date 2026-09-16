@@ -656,17 +656,20 @@
       }
     }
   ],
-  "measuredAt": "2026-09-04T07:03:01.111Z",
+  "measuredAt": "2026-09-16T08:31:35.178Z",
   "serverName": "n8n-documentation-mcp",
-  "serverVersion": "2.82.1",
+  "serverVersion": "2.85.0",
   "launchCommand": "npx -y n8n-mcp",
   "envVarNames": [],
   "serverInstructions": null,
+  "negotiatedProtocolVersion": "2025-03-26",
   "isolation": {
     "docker": true,
     "image": "public.ecr.aws/docker/library/node:22-slim",
     "network": "bridge",
-    "note": "network enabled for package fetch; clean FS, no host credentials"
+    "note": "network enabled for package fetch; clean FS, no host credentials",
+    "arch": "linux/amd64"
   },
-  "timeoutMs": 240000
+  "timeoutMs": 240000,
+  "requestedProtocolVersion": "2025-06-18"
 }

@@ -1,16 +1,16 @@
 # apify — context cost
 
-**10,452 tokens** across 10 tools — *moderate* (5–15K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**10,452 tokens** across 10 tools — *moderate* (5–15K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
 
 An Anthropic request carries 4,793 of those tokens as tool definitions, and Claude counts those at **8,297**.
 
 | | |
 |---|---|
-| server (self-reported) | apify-mcp-server v0.15.4 |
+| server (self-reported) | apify-mcp-server v0.15.7 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y @apify/actors-mcp-server` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · architecture not on record · network enabled for package fetch; clean FS, no host credent |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | APIFY_TOKEN |
 | canonical SHA-256 | `4dd4565165c7066d8e8ef666f79cd8b323bad3d7f66b4d34fbe769f07e979453` |
 | category | vendor-official |
@@ -52,6 +52,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-16 | 10,426 | 10 | not recorded | not recorded | — |
 | 2026-08-19 | 10,426 | 10 | not recorded | docker | no change |
 | 2026-09-04 | 10,452 | 10 | 0.15.4 | docker | +26 |
+| 2026-09-16 | 10,452 | 10 | 0.15.7 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

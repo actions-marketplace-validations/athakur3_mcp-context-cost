@@ -1055,17 +1055,20 @@
       }
     }
   ],
-  "measuredAt": "2026-09-04T07:04:04.943Z",
+  "measuredAt": "2026-09-16T08:32:03.403Z",
   "serverName": "playwright-mcp",
   "serverVersion": "1.0.11",
   "launchCommand": "npx -y @executeautomation/playwright-mcp-server",
   "envVarNames": [],
   "serverInstructions": null,
+  "negotiatedProtocolVersion": "2025-06-18",
   "isolation": {
     "docker": true,
     "image": "public.ecr.aws/docker/library/node:22-slim",
     "network": "bridge",
-    "note": "network enabled for package fetch; clean FS, no host credentials"
+    "note": "network enabled for package fetch; clean FS, no host credentials",
+    "arch": "linux/amd64"
   },
-  "timeoutMs": 180000
+  "timeoutMs": 180000,
+  "requestedProtocolVersion": "2025-06-18"
 }

@@ -1,6 +1,6 @@
 {
   "method": "capture-index/v1",
-  "generatedAt": "2026-09-09",
+  "generatedAt": "2026-09-16",
   "captures": {
     "01a1bd0f450ccf86b0bf36b2b63749c70dc4add7b0a4d9621ce69e29c9db7b27": {
       "server": "codebase-memory-mcp",
@@ -145,6 +145,12 @@
       "date": "2026-08-19",
       "totalTokens": 9158,
       "toolCount": 21
+    },
+    "3405333902a4a368c930626f35a1c4cd947ab9cdc0e88e81963165028de16c55": {
+      "server": "agent-device",
+      "date": "2026-09-16",
+      "totalTokens": 48909,
+      "toolCount": 57
     },
     "3735162916165ab23696fc91fbf626bd99a36ddcd1e15746e91e16c7e336b379": {
       "server": "deepwiki",
@@ -518,11 +524,23 @@
       "totalTokens": 64,
       "toolCount": 1
     },
+    "d8e7072a1f0c7a586c9a7f4550329242fdaec8228d6f3acba0ea09cc106f12fa": {
+      "server": "agentphone",
+      "date": "2026-09-16",
+      "totalTokens": 6139,
+      "toolCount": 28
+    },
     "d9e46f0316917c1d140ffeebceefd4d31c16188780ac278baf347ff536015dd0": {
       "server": "puppeteer",
       "date": "2026-09-02",
       "totalTokens": 540,
       "toolCount": 7
+    },
+    "da19c0b307a393749f9451c0a8ca03344949edc55bf97afc9d3fbdcb26573ef6": {
+      "server": "mcp-atlassian",
+      "date": "2026-09-16",
+      "totalTokens": 17311,
+      "toolCount": 63
     },
     "e0194003d2ddaf668a23e0570cdbcf8c142c3314d3dd811a50ae99e5afd79ae3": {
       "server": "github-legacy",
@@ -623,8 +641,8 @@
   },
   "current": {
     "accessibility-scanner": "42d3cde136eda54a68cea42f820dbadf27e15394b10daa8ed26c90fd8fb59fcc",
-    "agent-device": "61a100d3f94ba6e81eedcbd151cfff7ce5e6acd36906571c7035e0b09a681dca",
-    "agentphone": "eec89a7ec71ac3e9e65fb8477bf594b4ce9af01b572bcc5d7e9fbbcc85f4e813",
+    "agent-device": "3405333902a4a368c930626f35a1c4cd947ab9cdc0e88e81963165028de16c55",
+    "agentphone": "d8e7072a1f0c7a586c9a7f4550329242fdaec8228d6f3acba0ea09cc106f12fa",
     "airbnb": "79c3109b4fa4e4735ba1071cacbd98948c6aba20b70c9a4295a78e84850a81e0",
     "airtable": "5f90d662e26a77e01125999b97db0bf9204bb92bd0fc7297a28495986d80ec30",
     "anki": "ff5c37e3ceea7d5f2514dc0b15b4443a9c6b10ce53fd9328f28be21759c69276",
@@ -673,7 +691,7 @@
     "huggingface": "a2e48e88545d92665679b878c9e66f4f902af2a11bccafc29cc6e627def941ae",
     "kubernetes": "20126671be70fdb77743a595f195002612b03c889b348447ed9ff4d7057f8c1c",
     "markitdown": "d708fc0ae4f3fb818d01cc3d4da0b74c2e5591a7982735d6200b3d56ab74d66b",
-    "mcp-atlassian": "7e46d900cd08847d2710e0e0a1ec66d6f3d415c01ca2e8e6c5a9e357a9d5b4c1",
+    "mcp-atlassian": "da19c0b307a393749f9451c0a8ca03344949edc55bf97afc9d3fbdcb26573ef6",
     "memory": "d028274f76dc9aa2e622ae02a17ce313aa65d7b5935254ca53889d4094238abb",
     "microsoft-learn": "9e3f4a65f0dc136a6ffa5ed00f95785ec561e9a78413888da160e44ceb139346",
     "mongodb": "c771e7295dc27668861b2a251566196a3e30b5b3ac282f7736aab96891bff300",

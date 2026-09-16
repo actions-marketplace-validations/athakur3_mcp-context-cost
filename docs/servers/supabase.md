@@ -1,16 +1,16 @@
 # supabase — context cost
 
-**5,007 tokens** across 29 tools — *moderate* (5–15K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**5,007 tokens** across 29 tools — *moderate* (5–15K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
 
 An Anthropic request carries 4,062 of those tokens as tool definitions, and Claude counts those at **7,323**.
 
 | | |
 |---|---|
-| server (self-reported) | supabase v0.11.0 |
+| server (self-reported) | supabase v0.12.0 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y @supabase/mcp-server-supabase@latest` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · architecture not on record · network enabled for package fetch; clean FS, no host credent |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | SUPABASE_ACCESS_TOKEN |
 | canonical SHA-256 | `8ad33a05f12e8c0f535683508468dd970df8715f01fc82235b2b039718aeebf7` |
 | category | vendor-official |
@@ -71,6 +71,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-16 | 5,013 | 29 | not recorded | not recorded | — |
 | 2026-08-18 | 5,013 | 29 | not recorded | docker | no change |
 | 2026-09-04 | 5,007 | 29 | 0.11.0 | docker | −6 |
+| 2026-09-16 | 5,007 | 29 | 0.12.0 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

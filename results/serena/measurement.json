@@ -1804,17 +1804,20 @@
       }
     }
   ],
-  "measuredAt": "2026-09-04T07:03:24.951Z",
+  "measuredAt": "2026-09-16T08:31:57.855Z",
   "serverName": "Serena",
   "serverVersion": "1.7.1.dev0",
   "launchCommand": "uvx --from git+https://github.com/oraios/serena serena start-mcp-server",
   "envVarNames": [],
   "serverInstructions": "CRITICAL: Before starting to work on a coding task, call the `initial_instructions` tool to read the 'Serena Instructions Manual'.",
+  "negotiatedProtocolVersion": "2025-06-18",
   "isolation": {
     "docker": true,
     "image": "ghcr.io/astral-sh/uv:python3.12-bookworm-slim",
     "network": "bridge",
-    "note": "network enabled for package fetch; clean FS, no host credentials, git installed"
+    "note": "network enabled for package fetch; clean FS, no host credentials, git installed",
+    "arch": "linux/amd64"
   },
-  "timeoutMs": 240000
+  "timeoutMs": 240000,
+  "requestedProtocolVersion": "2025-06-18"
 }

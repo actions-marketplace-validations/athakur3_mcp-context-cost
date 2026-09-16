@@ -6,7 +6,7 @@ We measure 107 popular MCP servers; 87 have a number today, and every failure is
 with its reason. Ranked on the wire, the spread is 1,700×: from `postgres` at 32 tokens to
 `github` at **54,622 tokens**, before the agent takes a single action. Of that, an Anthropic
 request carries 10,735 tokens as tool definitions, and Claude counts those at 18,728.
-Second-heaviest is `agent-device` at 53,669 on the wire, 40,105 carried, 75,686 on Claude.
+Second-heaviest is `comfyui-mcp` at 50,776 on the wire, 50,385 carried, 84,168 on Claude.
 
 - **[What moved](https://github.com/athakur3/mcp-context-cost/blob/main/results/regressions.md)**
   — each server's most recent cost movement, dated, and which half of the server moved

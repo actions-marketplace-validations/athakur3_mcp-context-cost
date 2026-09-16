@@ -1,6 +1,6 @@
 # sequential-thinking — context cost
 
-**1,003 tokens** across 1 tools — *light* (1–5K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**1,003 tokens** across 1 tools — *light* (1–5K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
 
 An Anthropic request carries 865 of those tokens as tool definitions, and Claude counts those at **1,804**.
 
@@ -44,6 +44,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-18 | 992 | 1 | not recorded | docker | no change |
 | 2026-09-03 | 1,003 | 1 | not recorded | docker | +11 |
 | 2026-09-04 | 1,003 | 1 | 2026.8.31 | docker | no change |
+| 2026-09-16 | 1,003 | 1 | 2026.8.31 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

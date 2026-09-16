@@ -442,12 +442,13 @@
       }
     }
   ],
-  "measuredAt": "2026-09-04T13:04:17.558Z",
+  "measuredAt": "2026-09-16T08:31:21.407Z",
   "serverName": "@pulumi/mcp-server",
   "serverVersion": "0.2.0",
   "launchCommand": "npx -y @pulumi/mcp-server@latest stdio",
   "envVarNames": [],
   "serverInstructions": null,
+  "negotiatedProtocolVersion": "2025-06-18",
   "isolation": {
     "docker": true,
     "image": "public.ecr.aws/docker/library/node:22-slim",
@@ -455,5 +456,6 @@
     "note": "network enabled for package fetch; clean FS, no host credentials",
     "arch": "linux/amd64"
   },
-  "timeoutMs": 240000
+  "timeoutMs": 240000,
+  "requestedProtocolVersion": "2025-06-18"
 }

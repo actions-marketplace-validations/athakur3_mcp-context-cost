@@ -1,6 +1,6 @@
 # sqlite — context cost
 
-**268 tokens** across 6 tools — *lean* (< 1K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**268 tokens** across 6 tools — *lean* (< 1K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
 
 An Anthropic request carries 268 of those tokens as tool definitions, and Claude counts those at **806**.
 
@@ -10,7 +10,7 @@ An Anthropic request carries 268 of those tokens as tool definitions, and Claude
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `uvx --with "mcp\<2" mcp-server-sqlite --db-path /tmp/test.db` |
-| isolation | docker · ghcr.io/astral-sh/uv:python3.12-bookworm-slim · network bridge · architecture not on record · network enabled for package fetch; clean FS, no host cred |
+| isolation | docker · ghcr.io/astral-sh/uv:python3.12-bookworm-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | none |
 | canonical SHA-256 | `d432983abc546eac2725c9db1a07f5f8dad0e6cbfb12f925c1d4fb61743d1c6b` |
 | category | official-reference |
@@ -47,6 +47,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 |---|---:|---:|---|---|---:|
 | 2026-08-18 | 268 | 6 | not recorded | docker | — |
 | 2026-09-04 | 268 | 6 | 0.1.0 | docker | no change |
+| 2026-09-16 | 268 | 6 | 0.1.0 | docker | no change |
 
 Full series: [results/history.csv](https://github.com/athakur3/mcp-context-cost/blob/main/results/history.csv).
 

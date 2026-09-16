@@ -1,6 +1,6 @@
 # figma-context — context cost
 
-**946 tokens** across 2 tools — *lean* (< 1K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**946 tokens** across 2 tools — *lean* (< 1K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
 
 An Anthropic request carries 898 of those tokens as tool definitions, and Claude counts those at **1,773**.
 
@@ -46,6 +46,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-26 | 946 | 2 | not recorded | docker | no change |
 | 2026-09-03 | 946 | 2 | not recorded | docker | no change |
 | 2026-09-04 | 946 | 2 | 0.13.2 | docker | no change |
+| 2026-09-16 | 946 | 2 | 0.13.2 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

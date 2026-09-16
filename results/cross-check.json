@@ -11,7 +11,7 @@
     "--format",
     "json"
   ],
-  "measuredAt": "2026-09-09",
+  "measuredAt": "2026-09-16",
   "isolation": "docker (same images, limits and package caches as a sweep)",
   "servers": {
     "accessibility-scanner": {
@@ -25,24 +25,24 @@
       "capturedSha256": "42d3cde136eda54a68cea42f820dbadf27e15394b10daa8ed26c90fd8fb59fcc"
     },
     "agent-device": {
-      "ourTokens": 53669,
-      "ourMappedTokens": 40105,
-      "cliTokens": 40124,
+      "ourTokens": 48909,
+      "ourMappedTokens": 33319,
+      "cliTokens": 33339,
       "ourToolCount": 57,
       "cliToolCount": 57,
       "toolSetMatches": true,
       "dynamic": false,
-      "capturedSha256": "61a100d3f94ba6e81eedcbd151cfff7ce5e6acd36906571c7035e0b09a681dca"
+      "capturedSha256": "3405333902a4a368c930626f35a1c4cd947ab9cdc0e88e81963165028de16c55"
     },
     "agentphone": {
-      "ourTokens": 6134,
-      "ourMappedTokens": 5582,
-      "cliTokens": 5613,
+      "ourTokens": 6139,
+      "ourMappedTokens": 5587,
+      "cliTokens": 5618,
       "ourToolCount": 28,
       "cliToolCount": 28,
       "toolSetMatches": true,
       "dynamic": false,
-      "capturedSha256": "eec89a7ec71ac3e9e65fb8477bf594b4ce9af01b572bcc5d7e9fbbcc85f4e813"
+      "capturedSha256": "d8e7072a1f0c7a586c9a7f4550329242fdaec8228d6f3acba0ea09cc106f12fa"
     },
     "airbnb": {
       "ourTokens": 486,
@@ -533,7 +533,7 @@
       "cliToolCount": 63,
       "toolSetMatches": true,
       "dynamic": true,
-      "capturedSha256": "69f61b1213f2153a03e480902005a228f79b39b8dc201bf720f0ca0a1b63fe5b"
+      "capturedSha256": "7f2e3882cb1eb0d71ed6818730382dae6a22c7f3ec87cbfc3c6fd86a28839010"
     },
     "memory": {
       "ourTokens": 2378,

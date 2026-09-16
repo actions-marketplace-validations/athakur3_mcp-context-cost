@@ -146,17 +146,20 @@
       }
     }
   ],
-  "measuredAt": "2026-09-04T06:39:18.800Z",
+  "measuredAt": "2026-09-16T08:30:04.630Z",
   "serverName": "sqlite",
   "serverVersion": "0.1.0",
   "launchCommand": "uvx --with \"mcp<2\" mcp-server-sqlite --db-path /tmp/test.db",
   "envVarNames": [],
   "serverInstructions": null,
+  "negotiatedProtocolVersion": "2025-06-18",
   "isolation": {
     "docker": true,
     "image": "ghcr.io/astral-sh/uv:python3.12-bookworm-slim",
     "network": "bridge",
-    "note": "network enabled for package fetch; clean FS, no host credentials"
+    "note": "network enabled for package fetch; clean FS, no host credentials",
+    "arch": "linux/amd64"
   },
-  "timeoutMs": 240000
+  "timeoutMs": 240000,
+  "requestedProtocolVersion": "2025-06-18"
 }

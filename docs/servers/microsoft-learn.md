@@ -1,6 +1,6 @@
 # microsoft-learn — context cost
 
-**972 tokens** across 3 tools — *lean* (< 1K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**972 tokens** across 3 tools — *lean* (< 1K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
 
 An Anthropic request carries 726 of those tokens as tool definitions, and Claude counts those at **1,612**.
 
@@ -10,7 +10,7 @@ An Anthropic request carries 726 of those tokens as tool definitions, and Claude
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y mcp-remote https://learn.microsoft.com/api/mcp` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · architecture not on record · network enabled for package fetch; clean FS, no host credent |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | none |
 | canonical SHA-256 | `9e3f4a65f0dc136a6ffa5ed00f95785ec561e9a78413888da160e44ceb139346` |
 | category | vendor-official |
@@ -45,6 +45,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-16 | 972 | 3 | not recorded | not recorded | — |
 | 2026-08-19 | 972 | 3 | not recorded | docker | no change |
 | 2026-09-04 | 972 | 3 | 1.0.0 | docker | no change |
+| 2026-09-16 | 972 | 3 | 1.0.0 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

@@ -105,17 +105,20 @@
       }
     }
   ],
-  "measuredAt": "2026-09-04T06:57:38.410Z",
+  "measuredAt": "2026-09-16T08:31:19.851Z",
   "serverName": "docs-ai-search",
   "serverVersion": "0.4.13",
   "launchCommand": "npx -y mcp-remote https://docs.mcp.cloudflare.com/sse",
   "envVarNames": [],
   "serverInstructions": null,
+  "negotiatedProtocolVersion": "2025-06-18",
   "isolation": {
     "docker": true,
     "image": "public.ecr.aws/docker/library/node:22-slim",
     "network": "bridge",
-    "note": "network enabled for package fetch; clean FS, no host credentials"
+    "note": "network enabled for package fetch; clean FS, no host credentials",
+    "arch": "linux/amd64"
   },
-  "timeoutMs": 240000
+  "timeoutMs": 120000,
+  "requestedProtocolVersion": "2025-06-18"
 }

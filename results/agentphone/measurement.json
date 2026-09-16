@@ -3,7 +3,7 @@
   "provider": "tiktoken",
   "encoding": "o200k_base",
   "status": "measured",
-  "totalTokens": 6134,
+  "totalTokens": 6139,
   "toolCount": 28,
   "tools": [
     {
@@ -176,9 +176,9 @@
     },
     {
       "name": "manage_contact",
-      "tokens": 311,
+      "tokens": 316,
       "descriptionTokens": 61,
-      "inputSchemaTokens": 220,
+      "inputSchemaTokens": 225,
       "outputSchemaTokens": 0,
       "annotationsTokens": 7
     },
@@ -231,7 +231,7 @@
       "annotationsTokens": 14
     }
   ],
-  "canonicalSha256": "eec89a7ec71ac3e9e65fb8477bf594b4ce9af01b572bcc5d7e9fbbcc85f4e813",
+  "canonicalSha256": "d8e7072a1f0c7a586c9a7f4550329242fdaec8228d6f3acba0ea09cc106f12fa",
   "rawToolsCapture": [
     {
       "name": "account_overview",
@@ -1169,7 +1169,7 @@
             "description": "Contact email address",
             "type": "string",
             "format": "email",
-            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
           },
           "notes": {
             "description": "Freeform notes about the contact",
@@ -1362,7 +1362,7 @@
       }
     }
   ],
-  "measuredAt": "2026-09-04T13:07:44.140Z",
+  "measuredAt": "2026-09-16T08:33:07.947Z",
   "serverName": "agentphone",
   "serverVersion": "0.7.0",
   "launchCommand": "npx -y agentphone-mcp",
@@ -1370,6 +1370,7 @@
     "AGENTPHONE_API_KEY"
   ],
   "serverInstructions": null,
+  "negotiatedProtocolVersion": "2025-06-18",
   "isolation": {
     "docker": true,
     "image": "public.ecr.aws/docker/library/node:22-slim",
@@ -1377,5 +1378,6 @@
     "note": "network enabled for package fetch; clean FS, no host credentials",
     "arch": "linux/amd64"
   },
-  "timeoutMs": 240000
+  "timeoutMs": 240000,
+  "requestedProtocolVersion": "2025-06-18"
 }

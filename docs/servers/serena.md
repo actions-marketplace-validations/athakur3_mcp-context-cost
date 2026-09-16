@@ -1,6 +1,6 @@
 # serena — context cost
 
-**8,204 tokens** across 29 tools — *moderate* (5–15K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**8,204 tokens** across 29 tools — *moderate* (5–15K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
 
 An Anthropic request carries 6,550 of those tokens as tool definitions, and Claude counts those at **11,494**.
 
@@ -10,7 +10,7 @@ An Anthropic request carries 6,550 of those tokens as tool definitions, and Clau
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `uvx --from git+https://github.com/oraios/serena serena start-mcp-server` |
-| isolation | docker · ghcr.io/astral-sh/uv:python3.12-bookworm-slim · network bridge · architecture not on record · network enabled for package fetch; clean FS, no host cred |
+| isolation | docker · ghcr.io/astral-sh/uv:python3.12-bookworm-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials, git in |
 | env vars supplied | none |
 | canonical SHA-256 | `7d876a84707e0689df306366dc7c3225ae49762ca045d7604c7c9a2b20dfbc3c` |
 | category | community |
@@ -71,6 +71,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-17 | 8,204 | 29 | not recorded | not recorded | — |
 | 2026-08-19 | 8,204 | 29 | not recorded | docker | no change |
 | 2026-09-04 | 8,204 | 29 | 1.7.1.dev0 | docker | no change |
+| 2026-09-16 | 8,204 | 29 | 1.7.1.dev0 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

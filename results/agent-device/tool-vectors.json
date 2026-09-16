@@ -236,6 +236,242 @@
           "tokens": 142
         }
       ]
+    },
+    {
+      "date": "2026-09-16",
+      "canonicalSha256": "3405333902a4a368c930626f35a1c4cd947ab9cdc0e88e81963165028de16c55",
+      "totalTokens": 48909,
+      "version": "0.21.4",
+      "tools": [
+        {
+          "name": "alert",
+          "tokens": 533
+        },
+        {
+          "name": "app-switcher",
+          "tokens": 515
+        },
+        {
+          "name": "apps",
+          "tokens": 516
+        },
+        {
+          "name": "appstate",
+          "tokens": 621
+        },
+        {
+          "name": "artifacts",
+          "tokens": 487
+        },
+        {
+          "name": "audio",
+          "tokens": 519
+        },
+        {
+          "name": "back",
+          "tokens": 1208
+        },
+        {
+          "name": "batch",
+          "tokens": 746
+        },
+        {
+          "name": "boot",
+          "tokens": 604
+        },
+        {
+          "name": "capabilities",
+          "tokens": 458
+        },
+        {
+          "name": "click",
+          "tokens": 2844
+        },
+        {
+          "name": "clipboard",
+          "tokens": 574
+        },
+        {
+          "name": "close",
+          "tokens": 550
+        },
+        {
+          "name": "debug",
+          "tokens": 583
+        },
+        {
+          "name": "devices",
+          "tokens": 579
+        },
+        {
+          "name": "diff",
+          "tokens": 672
+        },
+        {
+          "name": "doctor",
+          "tokens": 752
+        },
+        {
+          "name": "events",
+          "tokens": 459
+        },
+        {
+          "name": "fill",
+          "tokens": 4848
+        },
+        {
+          "name": "find",
+          "tokens": 993
+        },
+        {
+          "name": "focus",
+          "tokens": 509
+        },
+        {
+          "name": "gesture",
+          "tokens": 852
+        },
+        {
+          "name": "get",
+          "tokens": 689
+        },
+        {
+          "name": "home",
+          "tokens": 506
+        },
+        {
+          "name": "hover",
+          "tokens": 2605
+        },
+        {
+          "name": "install",
+          "tokens": 516
+        },
+        {
+          "name": "install-from-source",
+          "tokens": 509
+        },
+        {
+          "name": "is",
+          "tokens": 657
+        },
+        {
+          "name": "keyboard",
+          "tokens": 678
+        },
+        {
+          "name": "logs",
+          "tokens": 481
+        },
+        {
+          "name": "longpress",
+          "tokens": 2612
+        },
+        {
+          "name": "metro",
+          "tokens": 666
+        },
+        {
+          "name": "network",
+          "tokens": 481
+        },
+        {
+          "name": "open",
+          "tokens": 1029
+        },
+        {
+          "name": "orientation",
+          "tokens": 559
+        },
+        {
+          "name": "perf",
+          "tokens": 647
+        },
+        {
+          "name": "press",
+          "tokens": 2796
+        },
+        {
+          "name": "push",
+          "tokens": 607
+        },
+        {
+          "name": "react-native",
+          "tokens": 489
+        },
+        {
+          "name": "record",
+          "tokens": 994
+        },
+        {
+          "name": "reinstall",
+          "tokens": 509
+        },
+        {
+          "name": "replay",
+          "tokens": 773
+        },
+        {
+          "name": "screenshot",
+          "tokens": 617
+        },
+        {
+          "name": "scroll",
+          "tokens": 1535
+        },
+        {
+          "name": "session",
+          "tokens": 534
+        },
+        {
+          "name": "settings",
+          "tokens": 537
+        },
+        {
+          "name": "shutdown",
+          "tokens": 621
+        },
+        {
+          "name": "snapshot",
+          "tokens": 694
+        },
+        {
+          "name": "swipe",
+          "tokens": 605
+        },
+        {
+          "name": "test",
+          "tokens": 753
+        },
+        {
+          "name": "trace",
+          "tokens": 648
+        },
+        {
+          "name": "trigger-app-event",
+          "tokens": 594
+        },
+        {
+          "name": "tv-remote",
+          "tokens": 645
+        },
+        {
+          "name": "type",
+          "tokens": 512
+        },
+        {
+          "name": "viewport",
+          "tokens": 558
+        },
+        {
+          "name": "wait",
+          "tokens": 687
+        },
+        {
+          "name": "help",
+          "tokens": 142
+        }
+      ]
     }
   ]
 }

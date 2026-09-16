@@ -1,6 +1,6 @@
 # netlify — context cost
 
-**2,831 tokens** across 9 tools — *light* (1–5K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**2,831 tokens** across 9 tools — *light* (1–5K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
 
 An Anthropic request carries 2,678 of those tokens as tool definitions, and Claude counts those at **5,229**.
 
@@ -53,6 +53,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-26 | 2,831 | 9 | not recorded | docker | no change |
 | 2026-09-03 | 2,831 | 9 | not recorded | docker | no change |
 | 2026-09-04 | 2,831 | 9 | 1.15.1 | docker | no change |
+| 2026-09-16 | 2,831 | 9 | 1.15.1 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

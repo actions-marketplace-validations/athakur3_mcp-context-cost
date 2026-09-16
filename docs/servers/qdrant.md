@@ -1,12 +1,12 @@
 # qdrant — context cost
 
-**188 tokens** across 2 tools — *lean* (< 1K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**188 tokens** across 2 tools — *lean* (< 1K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
 
 An Anthropic request carries 188 of those tokens as tool definitions, and Claude counts those at **607**.
 
 | | |
 |---|---|
-| server (self-reported) | mcp-server-qdrant v1.29.1 |
+| server (self-reported) | mcp-server-qdrant v1.30.0 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `uvx mcp-server-qdrant` |
@@ -46,6 +46,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-26 | 188 | 2 | not recorded | docker | no change |
 | 2026-09-03 | 188 | 2 | not recorded | docker | no change |
 | 2026-09-04 | 188 | 2 | 1.29.1 | docker | no change |
+| 2026-09-16 | 188 | 2 | 1.30.0 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

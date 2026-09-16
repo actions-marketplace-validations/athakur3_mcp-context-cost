@@ -8,15 +8,17 @@
   "tools": [],
   "canonicalSha256": null,
   "rawToolsCapture": null,
-  "measuredAt": "2026-09-04T07:28:44.195Z",
+  "measuredAt": "2026-09-16T08:33:32.000Z",
   "serverName": "safari-mcp",
   "launchCommand": "npx -y safari-mcp",
-  "notes": "macOS only — the package declares os darwin and npm refuses to install it on Linux — server exited (code 1); stderr tail: npm error code EBADPLATFORM\nnpm error notsup Unsupported platform for safari-mcp@2.18.1: wanted {\"os\":\"darwin\"} (current: {\"os\":\"linux\"})\nnpm error notsup Valid os:  darwin\nnpm error notsup Actual os: linux\nnpm error A complete log of this run can be found in: /tmp/.npm-cache/_logs/2026-09-04T07_28_41_971Z-debug-0.log",
+  "notes": "macOS only — the package declares os darwin and npm refuses to install it on Linux — server exited (code 1); stderr tail: npm error code EBADPLATFORM\nnpm error notsup Unsupported platform for safari-mcp@2.21.9: wanted {\"os\":\"darwin\"} (current: {\"os\":\"linux\"})\nnpm error notsup Valid os:  darwin\nnpm error notsup Actual os: linux\nnpm error A complete log of this run can be found in: /tmp/.npm-cache/_logs/2026-09-16T08_33_29_904Z-debug-0.log",
   "isolation": {
     "docker": true,
     "image": "public.ecr.aws/docker/library/node:22-slim",
     "network": "bridge",
-    "note": "network enabled for package fetch; clean FS, no host credentials"
+    "note": "network enabled for package fetch; clean FS, no host credentials",
+    "arch": "linux/amd64"
   },
-  "timeoutMs": 240000
+  "timeoutMs": 240000,
+  "requestedProtocolVersion": "2025-06-18"
 }

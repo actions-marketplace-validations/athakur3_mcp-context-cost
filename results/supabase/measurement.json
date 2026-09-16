@@ -1105,19 +1105,22 @@
       }
     }
   ],
-  "measuredAt": "2026-09-04T06:48:38.136Z",
+  "measuredAt": "2026-09-16T08:30:19.916Z",
   "serverName": "supabase",
-  "serverVersion": "0.11.0",
+  "serverVersion": "0.12.0",
   "launchCommand": "npx -y @supabase/mcp-server-supabase@latest",
   "envVarNames": [
     "SUPABASE_ACCESS_TOKEN"
   ],
-  "serverInstructions": "Here are guidelines for using Supabase tools effectively:\n\n- Before making schema changes, use `list_tables` to understand the existing structure\n- When debugging issues, start with `get_logs` and `get_advisors` before making changes\n- Use `get_project_url` and `get_publishable_api_key` when helping users configure client-side integrations\n\nIf you have access to a local development environment with a filesystem and shell:\n- Install the Supabase agent skill for critical development and security guidance: `npx skills add supabase/agent-skills` (https://supabase.com/docs/guides/getting-started/ai-skills.md)\n- Use the Supabase CLI (`supabase`) for local development workflows such as starting a local stack, managing migrations, and running edge functions locally (https://supabase.com/docs/guides/local-development.md)\n- Prefer local development and testing before applying changes to a remote project\n\nIf you are running in a web-only or remote environment without filesystem or shell access:\n- Rely on the MCP tools directly for all Supabase interactions\n- Use `apply_migration` carefully, as changes go directly to the remote project",
+  "serverInstructions": "Here are guidelines for using Supabase tools effectively:\n\n- Before making schema changes, inspect the existing tables so you understand the current structure\n- When debugging issues, start by reading the project's logs and its security and performance advisories before making changes\n- Look up the project's API URL and its publishable API keys when helping users configure client-side integrations\n\nIf you have access to a local development environment with a filesystem and shell:\n- Install the Supabase agent skill for critical development and security guidance: `npx skills add supabase/agent-skills` (https://supabase.com/docs/guides/getting-started/ai-skills.md)\n- Use the Supabase CLI (`supabase`) for local development workflows such as starting a local stack, managing migrations, and running edge functions locally (https://supabase.com/docs/guides/local-development.md)\n- Prefer local development and testing before applying changes to a remote project\n\nIf you are running in a web-only or remote environment without filesystem or shell access:\n- Rely on the MCP tools directly for all Supabase interactions\n- Apply schema migrations carefully, as changes go directly to the remote project",
+  "negotiatedProtocolVersion": "2025-06-18",
   "isolation": {
     "docker": true,
     "image": "public.ecr.aws/docker/library/node:22-slim",
     "network": "bridge",
-    "note": "network enabled for package fetch; clean FS, no host credentials"
+    "note": "network enabled for package fetch; clean FS, no host credentials",
+    "arch": "linux/amd64"
   },
-  "timeoutMs": 240000
+  "timeoutMs": 240000,
+  "requestedProtocolVersion": "2025-06-18"
 }

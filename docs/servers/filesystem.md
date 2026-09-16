@@ -1,6 +1,6 @@
 # filesystem — context cost
 
-**2,823 tokens** across 14 tools — *light* (1–5K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**2,823 tokens** across 14 tools — *light* (1–5K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
 
 An Anthropic request carries 1,665 of those tokens as tool definitions, and Claude counts those at **3,115**.
 
@@ -10,7 +10,7 @@ An Anthropic request carries 1,665 of those tokens as tool definitions, and Clau
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y @modelcontextprotocol/server-filesystem /tmp` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · architecture not on record · network enabled for package fetch; clean FS, no host credent |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | none |
 | canonical SHA-256 | `245b04832111268c3fcc72543af89fb2f8c109d8306c1b5b8c49dc45977e41e1` |
 | category | official-reference |
@@ -56,6 +56,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-16 | 2,823 | 14 | not recorded | not recorded | — |
 | 2026-08-18 | 2,823 | 14 | not recorded | docker | no change |
 | 2026-09-04 | 2,823 | 14 | 0.2.0 | docker | no change |
+| 2026-09-16 | 2,823 | 14 | 0.2.0 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

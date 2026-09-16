@@ -1,6 +1,6 @@
 # mongodb — context cost
 
-**7,926 tokens** across 27 tools — *moderate* (5–15K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**7,926 tokens** across 27 tools — *moderate* (5–15K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
 
 An Anthropic request carries 4,501 of those tokens as tool definitions, and Claude counts those at **8,765**.
 
@@ -71,6 +71,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-26 | 7,926 | 27 | not recorded | docker | no change |
 | 2026-09-03 | 7,926 | 27 | not recorded | docker | no change |
 | 2026-09-04 | 7,926 | 27 | 2.1.1 | docker | no change |
+| 2026-09-16 | 7,926 | 27 | 2.1.1 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

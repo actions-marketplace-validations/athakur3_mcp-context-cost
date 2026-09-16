@@ -1,6 +1,6 @@
 # cloudflare-docs — context cost
 
-**422 tokens** across 2 tools — *lean* (< 1K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**422 tokens** across 2 tools — *lean* (< 1K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
 
 An Anthropic request carries 252 of those tokens as tool definitions, and Claude counts those at **756**.
 
@@ -10,7 +10,7 @@ An Anthropic request carries 252 of those tokens as tool definitions, and Claude
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y mcp-remote https://docs.mcp.cloudflare.com/sse` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · architecture not on record · network enabled for package fetch; clean FS, no host credent |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | none |
 | canonical SHA-256 | `a65649ac29928ffde9e8bf8796482b5aaeb17e79d02ea2f3b8b96f11ac32b604` |
 | category | vendor-official |
@@ -44,6 +44,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-16 | 422 | 2 | not recorded | not recorded | — |
 | 2026-08-19 | 422 | 2 | not recorded | docker | no change |
 | 2026-09-04 | 422 | 2 | 0.4.13 | docker | no change |
+| 2026-09-16 | 422 | 2 | 0.4.13 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

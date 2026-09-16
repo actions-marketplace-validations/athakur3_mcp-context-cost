@@ -1,16 +1,16 @@
 # n8n-mcp — context cost
 
-**2,636 tokens** across 7 tools — *light* (1–5K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**2,636 tokens** across 7 tools — *light* (1–5K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
 
 An Anthropic request carries 2,022 of those tokens as tool definitions, and Claude counts those at **3,902**.
 
 | | |
 |---|---|
-| server (self-reported) | n8n-documentation-mcp v2.82.1 |
+| server (self-reported) | n8n-documentation-mcp v2.85.0 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y n8n-mcp` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · architecture not on record · network enabled for package fetch; clean FS, no host credent |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | none |
 | canonical SHA-256 | `efc31b255c09a3f364367c1450285b1e107d999faf01d4c9c37711aa12410948` |
 | category | community |
@@ -49,6 +49,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-16 | 2,636 | 7 | not recorded | not recorded | — |
 | 2026-08-19 | 2,636 | 7 | not recorded | docker | no change |
 | 2026-09-04 | 2,636 | 7 | 2.82.1 | docker | no change |
+| 2026-09-16 | 2,636 | 7 | 2.85.0 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

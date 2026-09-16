@@ -1336,12 +1336,13 @@
       }
     }
   ],
-  "measuredAt": "2026-09-04T13:06:03.636Z",
+  "measuredAt": "2026-09-16T08:32:17.363Z",
   "serverName": "kubernetes",
-  "serverVersion": "4.1.6",
+  "serverVersion": "4.1.7",
   "launchCommand": "npx -y mcp-server-kubernetes",
   "envVarNames": [],
   "serverInstructions": null,
+  "negotiatedProtocolVersion": "2025-06-18",
   "isolation": {
     "docker": true,
     "image": "public.ecr.aws/docker/library/node:22-slim",
@@ -1349,5 +1350,6 @@
     "note": "network enabled for package fetch; clean FS, no host credentials",
     "arch": "linux/amd64"
   },
-  "timeoutMs": 240000
+  "timeoutMs": 240000,
+  "requestedProtocolVersion": "2025-06-18"
 }

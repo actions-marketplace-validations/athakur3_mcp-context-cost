@@ -5,13 +5,13 @@ One page per measured server: the per-tool breakdown behind the badge, the exact
 | # | server | wire | mapped | Claude | tools | band |
 |---:|---|---:|---:|---:|---:|---|
 | 1 | [github](github.html) | 54,622 | 10,735 | 18,728 | 44 | very heavy |
-| 2 | [agent-device](agent-device.html) | 53,669 | 40,105 | 75,686 | 57 | very heavy |
-| 3 | [comfyui-mcp](comfyui-mcp.html) | 50,776 | 50,385 | 84,168 | 41 | very heavy |
+| 2 | [comfyui-mcp](comfyui-mcp.html) | 50,776 | 50,385 | 84,168 | 41 | very heavy |
+| 3 | [agent-device](agent-device.html) | 48,909 | 33,319 | — | 57 | very heavy |
 | 4 | [xcodebuildmcp](xcodebuildmcp.html) | 26,594 | 2,676 | 5,335 | 24 | heavy |
 | 5 | [brave-search](brave-search.html) | 25,487 | 8,278 | 13,762 | 8 | heavy |
 | 6 | [anki](anki.html) | 20,037 | 9,357 | 16,189 | 50 | heavy |
 | 7 | [notion](notion.html) | 17,500 | 17,163 | 33,560 | 24 | heavy |
-| 8 | [mcp-atlassian](mcp-atlassian.html) | 17,311 | 12,823 | 22,234 | 63 | heavy |
+| 8 | [mcp-atlassian](mcp-atlassian.html) | 17,311 | 12,823 | — | 63 | heavy |
 | 9 | [grafana](grafana.html) | 16,774 | 15,460 | 26,641 | 65 | heavy |
 | 10 | [azure](azure.html) | 15,657 | 14,703 | 26,928 | 70 | heavy |
 | 11 | [octocode](octocode.html) | 13,552 | 12,967 | 23,343 | 14 | moderate |
@@ -34,7 +34,7 @@ One page per measured server: the per-tool breakdown behind the badge, the exact
 | 28 | [blender](blender.html) | 6,928 | 6,160 | 10,576 | 28 | moderate |
 | 29 | [shopify-dev](shopify-dev.html) | 6,841 | 6,793 | 11,831 | 6 | moderate |
 | 30 | [bitbucket-mcp](bitbucket-mcp.html) | 6,156 | 6,156 | 12,210 | 47 | moderate |
-| 31 | [agentphone](agentphone.html) | 6,134 | 5,582 | 9,982 | 28 | moderate |
+| 31 | [agentphone](agentphone.html) | 6,139 | 5,587 | — | 28 | moderate |
 | 32 | [sentry](sentry.html) | 6,086 | 5,442 | 9,481 | 9 | moderate |
 | 33 | [pinecone](pinecone.html) | 5,903 | 5,679 | 9,184 | 9 | moderate |
 | 34 | [chrome-devtools](chrome-devtools.html) | 5,717 | 5,100 | 9,215 | 29 | moderate |
