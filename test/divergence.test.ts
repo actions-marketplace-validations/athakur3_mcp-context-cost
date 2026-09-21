@@ -31,7 +31,14 @@ const rawTool = {
 };
 
 function row(over: Partial<DivergenceRow> = {}): DivergenceRow {
-  return { o200kFull: 1000, o200kMapped: 400, claudeDelta: 700, toolCount: 2, capturedSha256: 'a'.repeat(64), ...over };
+  return {
+    o200kFull: 1000,
+    o200kMapped: 400,
+    claudeDelta: 700,
+    toolCount: 2,
+    capturedSha256: 'a'.repeat(64),
+    ...over,
+  };
 }
 
 function run(over: Partial<DivergenceRun> = {}): DivergenceRun {
@@ -49,7 +56,7 @@ function run(over: Partial<DivergenceRun> = {}): DivergenceRun {
 describe('toAnthropicTools', () => {
   it('keeps exactly the three fields an Anthropic tool definition carries', () => {
     const [t] = toAnthropicTools([rawTool]);
-    expect(Object.keys(t).sort()).toEqual(['description', 'input_schema', 'name']);
+    expect(Object.keys(t).toSorted()).toEqual(['description', 'input_schema', 'name']);
     expect(t.name).toBe('search');
     expect(t.description).toBe('Search the knowledge base');
     expect(t.input_schema).toEqual(rawTool.inputSchema);
@@ -63,7 +70,9 @@ describe('toAnthropicTools', () => {
   });
 
   it('skips tools with no usable name instead of inventing one', () => {
-    expect(toAnthropicTools([{ description: 'x' }, { name: '', description: 'y' }, rawTool])).toHaveLength(1);
+    expect(
+      toAnthropicTools([{ description: 'x' }, { name: '', description: 'y' }, rawTool]),
+    ).toHaveLength(1);
   });
 
   it('defaults a missing description and schema to empty rather than omitting the key', () => {
@@ -73,7 +82,9 @@ describe('toAnthropicTools', () => {
   });
 
   it('preserves tool order — the comparison is against the same sequence', () => {
-    const names = toAnthropicTools([{ name: 'b' }, { name: 'a' }, { name: 'c' }]).map((t) => t.name);
+    const names = toAnthropicTools([{ name: 'b' }, { name: 'a' }, { name: 'c' }]).map(
+      (t) => t.name,
+    );
     expect(names).toEqual(['b', 'a', 'c']);
   });
 });
@@ -167,7 +178,10 @@ describe('publishing the column', () => {
   it('omits the claude column entirely when no divergence run exists', () => {
     writeLeaderboard([entry], root);
     const md = readFileSync(join(root, 'results', 'leaderboard.md'), 'utf8');
-    expect(md).toContain('| # | server | tokens | session start | tools |');
+    // `mapped` is present here and `claude` is not, which is the distinction:
+    // the mapped column is recomputed from the capture in this same file, so it
+    // needs no run, while the Claude column needs one that does not exist here.
+    expect(md).toContain('| # | server | tokens | mapped | session start | tools |');
     expect(md).not.toContain('claude');
     const csv = readFileSync(join(root, 'results', 'leaderboard.csv'), 'utf8');
     expect(csv.split('\n')[0]).toContain('claudeTokens,claudeModel');
@@ -178,8 +192,12 @@ describe('publishing the column', () => {
     writeFileSync(join(root, 'results', 'divergence.json'), JSON.stringify(run()));
     writeLeaderboard([entry], root);
     const md = readFileSync(join(root, 'results', 'leaderboard.md'), 'utf8');
-    expect(md).toContain('| # | server | tokens | session start | claude | tools |');
-    expect(md).toContain('| 1 | [demo](../docs/servers/demo.md) | 1,000 | ≥1 | 700 | 2 |');
+    expect(md).toContain('| # | server | tokens | mapped | session start | claude | tools |');
+    // The `1` after 1,000 is the mapped cell: this fixture's `rawToolsCapture`
+    // is empty, so the projection is `[]` and costs one token. The full row is
+    // pinned rather than one cell, because a column inserted anywhere in it
+    // should fail here loudly rather than shift a positional read silently.
+    expect(md).toContain('| 1 | [demo](../docs/servers/demo.md) | 1,000 | 1 | ≥1 | 700 | 2 |');
     expect(md).toContain('claude-opus-5');
     const csv = readFileSync(join(root, 'results', 'leaderboard.csv'), 'utf8');
     expect(csv.split('\n')[1]).toContain(',700,claude-opus-5');
@@ -190,7 +208,7 @@ describe('publishing the column', () => {
     writeFileSync(join(root, 'results', 'divergence.json'), JSON.stringify(stale));
     writeLeaderboard([entry], root);
     const md = readFileSync(join(root, 'results', 'leaderboard.md'), 'utf8');
-    expect(md).toContain('| 1 | [demo](../docs/servers/demo.md) | 1,000 | ≥1 | — | 2 |');
+    expect(md).toContain('| 1 | [demo](../docs/servers/demo.md) | 1,000 | 1 | ≥1 | — | 2 |');
     const csv = readFileSync(join(root, 'results', 'leaderboard.csv'), 'utf8');
     expect(csv.split('\n')[1].split(',').slice(7, 9)).toEqual(['', '']);
   });
@@ -219,7 +237,7 @@ describe('publishing the column', () => {
  * published sentence against the cell it depends on.
  */
 describe('dropStaleRows', () => {
-  const row = (sha: string): DivergenceRow => ({
+  const rowFor = (sha: string): DivergenceRow => ({
     o200kFull: 100,
     o200kMapped: 60,
     claudeDelta: 40,
@@ -227,14 +245,14 @@ describe('dropStaleRows', () => {
     capturedSha256: sha,
   });
 
-  it('keeps a row that still describes the capture on disk', () => {
-    const { kept, dropped } = dropStaleRows({ github: row('abc') }, () => 'abc');
+  it('keeps a rowFor that still describes the capture on disk', () => {
+    const { kept, dropped } = dropStaleRows({ github: rowFor('abc') }, () => 'abc');
     expect(Object.keys(kept)).toEqual(['github']);
     expect(dropped).toEqual([]);
   });
 
-  it('drops a row whose capture has moved — the eight of twenty-four case', () => {
-    const { kept, dropped } = dropStaleRows({ github: row('abc') }, () => 'def');
+  it('drops a rowFor whose capture has moved — the eight of twenty-four case', () => {
+    const { kept, dropped } = dropStaleRows({ github: rowFor('abc') }, () => 'def');
     expect(kept).toEqual({});
     expect(dropped).toEqual(['github']);
   });
@@ -242,17 +260,17 @@ describe('dropStaleRows', () => {
   it('drops a row for a server with no capture at all', () => {
     // Nothing can confirm it, so carrying it forward is carrying a claim with
     // its evidence deleted — the same rule the evidence tail follows.
-    const { dropped } = dropStaleRows({ gone: row('abc') }, () => undefined);
+    const { dropped } = dropStaleRows({ gone: rowFor('abc') }, () => undefined);
     expect(dropped).toEqual(['gone']);
   });
 
   it('drops a row that never recorded which capture it came from', () => {
-    const { dropped } = dropStaleRows({ legacy: row('') }, () => '');
+    const { dropped } = dropStaleRows({ legacy: rowFor('') }, () => '');
     expect(dropped).toEqual(['legacy']);
   });
 
   it('is exactly what isCurrent would have hidden, decided one layer earlier', () => {
-    const servers = { a: row('same'), b: row('moved') };
+    const servers = { a: rowFor('same'), b: rowFor('moved') };
     const sha = (n: string) => (n === 'a' ? 'same' : 'elsewhere');
     const { kept } = dropStaleRows(servers, sha);
     for (const [name, r] of Object.entries(servers)) {

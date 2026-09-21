@@ -2,13 +2,15 @@
 
 **549 tokens** across 7 tools — *lean* (< 1K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
 
+An Anthropic request carries 549 of those tokens as tool definitions, and Claude counts those at **1,332**.
+
 | | |
 |---|---|
 | server (self-reported) | mcp-server/google-maps v0.1.0 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y @modelcontextprotocol/server-google-maps` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | GOOGLE_MAPS_API_KEY |
 | canonical SHA-256 | `a88e204db09aa56954e3e041d6a9814aee9ac888fdfc7d5cb47aec1877441986` |
 | category | official-reference |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | maps_distance_matrix | 124 | 22.6% | 10 | 102 |
 | maps_directions | 99 | 18.0% | 5 | 82 |
@@ -30,7 +32,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|

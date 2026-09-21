@@ -1,6 +1,8 @@
 # google-surf — context cost
 
-**10,948 tokens** across 7 tools — *moderate* (5–15K). Measured 2026-09-05 under [methodology v1.0](../METHODOLOGY.html).
+**10,948 tokens** across 7 tools — *moderate* (5–15K). Measured 2026-09-09 under [methodology v1.0](../METHODOLOGY.html).
+
+An Anthropic request carries 6,412 of those tokens as tool definitions, and Claude counts those at **11,232**.
 
 | | |
 |---|---|
@@ -8,7 +10,7 @@
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y google-surf-mcp` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | none |
 | canonical SHA-256 | `64ca81a34311e1318d731b8fbf14e5f1759567e4a7bdaabf43f3553ee732ee41` |
 | category | community |
@@ -16,21 +18,21 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
-|---|---:|---:|---:|---:|
-| project_memory | 3,279 | 30.0% | 285 | 2,030 |
-| search_parallel | 1,860 | 17.0% | 482 | 631 |
-| search | 1,737 | 15.9% | 478 | 612 |
-| project_memory_search | 1,436 | 13.1% | 208 | 261 |
-| extract | 1,249 | 11.4% | 330 | 511 |
-| scholar_search | 981 | 9.0% | 134 | 302 |
-| health | 404 | 3.7% | 50 | 24 |
+| tool | tokens | share | description | input schema | output schema |
+|---|---:|---:|---:|---:|---:|
+| project_memory | 3,279 | 30.0% | 285 | 2,030 | 917 |
+| search_parallel | 1,860 | 17.0% | 482 | 631 | 697 |
+| search | 1,737 | 15.9% | 478 | 612 | 599 |
+| project_memory_search | 1,436 | 13.1% | 208 | 261 | 917 |
+| extract | 1,249 | 11.4% | 330 | 511 | 358 |
+| scholar_search | 981 | 9.0% | 134 | 302 | 496 |
+| health | 404 | 3.7% | 50 | 24 | 281 |
 
 Each tool is tokenized on its own, so the parts do not sum exactly to the whole: the array adds its own brackets and commas, and the tokenizer merges tokens across object boundaries. The badge number is always the count of the whole array, never a sum of parts.
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -46,6 +48,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 |---|---:|---:|---|---|---:|
 | 2026-09-04 | 10,948 | 7 | 1.0.9 | docker | — |
 | 2026-09-05 | 10,948 | 7 | 1.0.9 | docker | no change |
+| 2026-09-09 | 10,948 | 7 | 1.0.9 | docker | no change |
 
 Full series: [results/history.csv](https://github.com/athakur3/mcp-context-cost/blob/main/results/history.csv).
 

@@ -12,6 +12,8 @@ Precisely:
 
 1. Connect to the MCP server and call `initialize`, then `tools/list`, following pagination
    (`nextCursor`) to exhaustion. Concatenate the `tools` arrays in server-returned order.
+   The `initialize` declares **no client capabilities** — see "What the client declares" below,
+   because that choice is visible in the number.
 2. **Canonical form** = UTF-8 of `JSON.stringify(tools)` over the **parsed** result value:
    no added whitespace, first-occurrence key order, standard JSON.parse semantics (duplicate
    keys last-wins, numbers re-serialized per ECMA-404). Defined on the parsed value rather
@@ -22,11 +24,38 @@ Precisely:
 That's all. No model calls, no API keys, no sampling — the same input yields the same number
 on anyone's machine, in any language with a tiktoken port.
 
+
+### What the client declares, and why it is part of the number
+
+This harness sends `capabilities: {}` at `initialize`. It can do nothing on the client side, and
+it says so. That is not a neutral posture: the protocol lets a server decide which tools to
+expose based on what the client declares, so a server may show a smaller set to this harness than
+to a client that declares more. Where that happens, the number published here is a **floor**.
+
+Measured in CI on 2026-09-06 (`tools/capability-probe.ts`, run under the same isolation as a
+sweep, each entry captured twice and differing only in the declaration): of the **87** entries
+that could be compared, **one** exposes a different tool set to a client declaring `roots` and
+`elicitation` — the reference `everything` server, which gains `get-roots-list` and
+`trigger-elicitation-request`, two tools and 197 tokens. That server exists to exercise every
+part of the protocol, so it is the one entry where this was most likely to show. No other server
+moved, none lost a tool, and no server's status changed between the two postures.
+
+So the floor is real and it is narrow, and this harness keeps declaring nothing. Declaring more
+would change the published number and the `canonicalSha256` of every affected capture, which is a
+methodology change; on this evidence it would buy 197 tokens on one server built to demonstrate
+the feature. The probe stays in the repository so the reading can be retaken when the set grows,
+and it declares only what this client can answer truthfully — an empty root list and a declined
+elicitation. It does not declare `sampling`, which would claim it can ask a model for a
+completion.
+
 ## Reproduce it
 
 Every published badge has a companion `measurement.json` containing the raw `tools/list`
 capture (`rawToolsCapture`), the SHA-256 of the canonical bytes, the exact launch command,
-and env var *names* (values redacted). Re-derive the number in five lines:
+env var *names* (values redacted), and both halves of the protocol handshake
+(`requestedProtocolVersion`, `negotiatedProtocolVersion`) — the revision this harness asked
+for and the revision the server answered with, which are not always the same; how to read
+the pair is below. Re-derive the number in five lines:
 
 ```js
 import { getEncoding } from "js-tiktoken";           // or tiktoken (py), tiktoken-rs
@@ -42,6 +71,31 @@ argument we want to have.
 Each measured server also has a [detail page](servers/) carrying that server's per-tool
 breakdown, launch command, isolation, canonical hash, and the one-line `verify` command —
 the same facts, without reading the capture by hand.
+
+### Which revision a record was taken under
+
+The two handshake fields read differently, and the difference is deliberate.
+`requestedProtocolVersion` is the revision this harness asked for at `initialize`, stamped
+on every record, measured or failed. `negotiatedProtocolVersion` is the server's own
+answer — a field the protocol requires it to send and allows to differ from the request —
+so it is present only where `initialize` returned one. Absent means **not captured**: a
+record that predates these fields, a run `initialize` never answered, or a server that
+omitted the field it was required to send. An absence is never read as the requested value,
+and never as agreement or disagreement.
+
+They are stored as a pair because a record keeping only the server's answer would have to
+be read against whatever revision this harness asks for *today* — and the day the harness
+moves to a newer revision, every record taken before the move would start reading as a
+disagreement about a run that agreed perfectly at the time.
+
+On a measured record the two need not match, and a mismatch ends nothing. The specification
+requires disconnecting only when the client *cannot support* the version the server names,
+and the requests this probe sends are unchanged across every revision a server has answered
+with — so a difference is recorded and measured through, never hung up on; a 2026-09-07
+census found eleven of eighty-eight answering servers naming an older revision than the
+request carried, and their numbers stand. What ends a run is a refusal: a server that
+rejects a request by naming the protocol files as
+[`protocol-mismatch`](#failure-taxonomy), with no number at all.
 
 ## What the number is not
 
@@ -76,7 +130,30 @@ the same facts, without reading the capture by hand.
   Commands that are already `docker run …` are host-spawned containers and recorded as such.
   No real tokens or secrets are ever present in the environment.
 
-## Failure taxonomy — no silent drops
+### Which machine a number applies to
+
+**Every published number here was measured on Linux, on an x86-64 GitHub runner.** Nothing in
+this repository has been measured on macOS or on Windows, and no number here is a claim about
+either. Each record carries the machine that made it in `isolation.arch`, and each server page
+prints it beside the image; records made before 0.12.0, which is where the field shipped, say
+`architecture not on record` rather than borrowing the value from their neighbours. Absent means
+unknown, never "the same as yours".
+
+That matters because a package can run on one platform and not another, and then the machine
+decides the result rather than the server. `local-mcp` is the case that taught it: published as a
+broken server on the strength of a run whose real finding was the architecture. It is also why
+this page does not promote a package's *declared* platform support into a claim about where it
+runs. A declaration that **restricts** is enforced — npm refuses to install `safari-mcp` off
+macOS, and the refusal is quoted in its record. A declaration that **permits** is the author's
+word and can be false: `local-mcp` widened its declaration to include Linux on 2026-08-14 and
+still had no Linux runtime three weeks later, when this project measured it. So a restricting
+declaration is evidence and a permissive one is not, and only the first is ever cited here.
+
+A row that could not be measured says which kind of blocker it hit, in its own words: a platform
+the package refuses to install on, or a backing service the isolation deliberately does not
+provide. The first would measure on a different machine; the second would not measure on any.
+
+## Failure taxonomy — no silent drops <a id="failure-taxonomy"></a>
 
 Every candidate server appears in published results with exactly one status:
 
@@ -88,12 +165,14 @@ Every candidate server appears in published results with exactly one status:
 | `startup-failure` | crashed or missing dependencies (stderr tail recorded) |
 | `timeout` | no response within the configured timeout (recorded per measurement) |
 | `not-applicable` | this harness cannot run it — an OS or architecture the package does not ship for, or a backing service the isolation deliberately does not provide |
+| `protocol-mismatch` | the server refused a request by naming the protocol rather than itself — it launched, the transport worked, and it answered, so this is not a claim that it failed to come up. Either it has no `initialize` handler (the 2026-07-28 revision replaced the handshake with `server/discover`), or it rejected the protocol version the request carried. The status does not claim the server speaks any particular revision; only the server's own `data.supported` establishes that, and the note quotes it verbatim when it sent one |
 | `remote-auth-wall` | OAuth-gated remote server; listed, not measured |
 | `not-yet-run` | candidate not yet swept — a merged entry carries this status on the published leaderboard until its rotation slot comes round (see [Trends over time](#trends-over-time--same-conditions-or-no-line)) |
 
 **A failure is retried before it is published.** Two of these statuses can be produced by
 the machine doing the measuring rather than by the server, so neither is published on a
-single attempt:
+single attempt (`protocol-mismatch` is not among them, and deliberately: a cold package
+cache does not change a protocol revision, and neither does a wider timeout budget):
 
 - a `startup-failure` under Docker isolation is re-attempted with the shared package caches
   bypassed, because a poisoned cache entry and a genuinely broken package exit identically;
@@ -136,7 +215,10 @@ exits non-zero. Nothing about that sweep reaches the published data. Below eithe
 the sweep publishes normally, including failures, because a small number of servers breaking
 at once is exactly what a real upstream breakage looks like. A sweep with no prior
 measurements to compare against reports that the check could not be performed, rather than
-reporting a pass.
+reporting a pass. A server that answers `tools/list` with an empty array is measured as it
+answered — zero tools, with a note saying whether it had declared a tools capability at
+`initialize` — but a zero is not counted as a real number by this check: a broken harness
+that gets nothing back would produce exactly that, a sweep of empty lists, and read as success.
 
 ## Trends over time — same conditions, or no line
 
@@ -167,7 +249,7 @@ week's slice doesn't include keep their most recent measurement, unchanged, on t
 leaderboard. One extra server, the reference server behind this project's own badge, is also
 re-measured weekly.
 
-## Color bands (provisional)
+## Color bands <a id="color-bands"></a>
 
 | tokens | color |
 |---|---|
@@ -204,7 +286,8 @@ opposite directions, and a single ratio hides the larger one:
 1. **Field selection.** `title`, `annotations`, `outputSchema`, `execution`, and `icons` are
    real bytes the server ships and the canonical form counts them — but an Anthropic `tools`
    array has nowhere to put them. Across the measured set this removes between 0.0% and
-   **89.9%** of the payload (xcodebuildmcp: 26,594 → 2,676 tokens).
+   **89.9%** of the payload (xcodebuildmcp: 26,594 → 2,676 tokens, which Claude counts at
+   5,335).
 2. **Tokenizer and framing.** Anthropic's tokenizer is denser on schema text than o200k_base,
    and the API adds its own framing around the tools channel. A single minimal tool costs
    328 tokens more than no tools at all, which is an upper bound on the fixed part.
@@ -267,12 +350,11 @@ page by hand would be a claim that quietly stops being true.
 no measurement taken before this method existed carries it. Those rows publish the names half
 alone, marked `≥`: a floor, not a figure. The distinction is the point — a floor printed as a
 figure would understate exactly the servers that ship the longest instructions. A row leaves
-the floor either by being re-measured (every sweep now records `serverInstructions` inside the
-measurement) or by a backfill capture in
-[`results/session-start.json`](https://github.com/athakur3/mcp-context-cost/blob/main/results/session-start.json),
-which is used only while its `capturedSha256` still matches the measurement on disk. When a
-re-sweep moves that hash the row drops back to its floor rather than keeping instructions
-captured against a tool set the server no longer serves.
+the floor by being re-measured, and only that way: every sweep records `serverInstructions`
+inside the measurement, off the same server process that produced the tools, so the two halves
+cannot be stale relative to each other. A side capture filed beside the measurements did the
+same job for rows measured before the field existed; every measured row now carries its own,
+so it was removed once nothing was reading it (2026-09-08).
 
 **What it is not.** Not any client's exact session-start bill either. Clients prefix tool names
 with a server identifier, wrap the list in their own framing, and choose independently whether
@@ -288,14 +370,112 @@ not part of the definition, moves no published number, and no badge or `totalTok
 because of anything in this section. It is what `audit` answers for a config it discovers,
 and it is stated here because a number nobody can attribute to a payer is not a cost.
 
+**What deferring changes, and what it does not.** Deferring means the definitions stay out of
+the model's context window until the model reaches for one — it does not mean they stop being
+sent. For the mechanism Claude Code's deferral is documented as riding on, the vendor states it
+in one sentence: "`defer_loading` controls what enters the context window, not what you send in
+the request" — every tool's full definition still travels in the `tools` array of every
+request, deferred ones included, because the API needs the definitions server-side to run the
+search (Anthropic tool-search documentation, §Deferred tool loading,
+`platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool.md`, read
+**2026-09-09**). So a deferring client does not make the headline above moot: it is what that
+stack puts into every request the session makes, before anything enters context. What deferral
+moves is which of those bytes enter the window — the difference the
+[session-start load](#session-start-load) column exists to measure. This is a statement about
+that one documented mechanism, not about every deferring client: Cursor's record below
+describes a different one, and what its backend sends is on no surface this project reads.
+
+**What counts as a record.** A record is a first-party statement about the client's own
+behaviour, on a surface that client's vendor controls, readable at a fixed address and
+carrying a date. Four kinds qualify, and the rule admits all four as of **2026-09-07**:
+
+| kind | what it settles |
+|---|---|
+| the client's own documentation, including its MCP configuration page | what the vendor commits to |
+| the vendor's dated engineering blog or changelog | what the vendor says it built, and when |
+| a named staff account posting on the vendor's own forum | what the vendor says its product does today |
+| the client's public source — a merged pull request, or a settings default in the shipping tree | what the code does, at a commit |
+
+**None of the four is a measurement**, and admitting them changes nothing about that. A
+record establishes what a vendor says or ships; only a measurement establishes what a session
+paid, and nothing published here has measured any client. So a record is published as a
+record: what the vendor states, what it leaves open, and the addresses and dates behind it.
+
+**Why the rule widened, which is the part worth checking.** Until 2026-09-07 it read one
+surface — each client's own configuration page — and reported an absence of a record for
+every client whose page did not mention deferring. Three clients say the opposite elsewhere.
+Cursor's engineering blog described its MCP deferral on **2026-01-06**, eight months before
+this project read Cursor's configuration page and recorded silence; that page is still silent
+today. A rule that consults one surface cannot distinguish a vendor that does not defer from
+a vendor that documents deferral somewhere else, and it reported the first when the second was
+true. What is not admitted is unchanged: a third-party summary, a forum post by an account
+that is not staff, or a recollection is not a record, and neither is a page that has stopped
+being reachable at a fixed address.
+
+**Where the vendor is on record as deferring.** For **Cursor**, **Codex CLI** and **VS Code**,
+`audit` prints the record, its conditions and its sources, and stops where Claude Code's own
+entry stops: the vendor says so, this audit has not measured it, and no config file it reads
+states a posture. It does not report these stacks as deferred and therefore free — that would
+be the same error as the one above, in the other direction.
+
+- **Cursor**, mechanism *dynamic context discovery*. Cursor states the agent receives tool
+  names and loads a tool's description and input schema on demand, and does not put every
+  attached tool's complete schema in every request. Sources: the engineering blog post
+  [Dynamic context discovery](https://cursor.com/blog/dynamic-context-discovery), dated
+  2026-01-06; a staff reply on [forum.cursor.com/t/166405](https://forum.cursor.com/t/166405)
+  post 5, 2026-07-22; and [cursor.com/docs/context/mcp](https://cursor.com/docs/context/mcp),
+  which is silent on the mechanism and offers no setting for it. All read **2026-09-07**. Left
+  open: definitions and results pulled in during a session stay in that session's history, so
+  a deferring session is not a free one; and the vendor's 46.9% figure is an A/B result across
+  runs that called an MCP tool, not a saving for any particular stack. Cursor's own context
+  tray is not a check on our number either — staff describe its count as a calibrated estimate
+  rather than a tokenizer count ([t/168744](https://forum.cursor.com/t/168744) post 5,
+  2026-08-20).
+- **Codex CLI**, mechanism *tool search*. Its source defers every effective MCP tool behind a
+  tool-search tool when the model supports that tool and the provider supports namespaced
+  tools, and exposes the definitions directly when either does not. Sources:
+  [openai/codex#29486](https://github.com/openai/codex/pull/29486), merged 2026-06-22, first
+  stable tag `rust-v0.142.2`, published 2026-06-25; `codex-rs/core/src/tools/spec_plan.rs` and
+  `codex-rs/features/src/lib.rs` at `main`, read **2026-09-07**. Left open: the two conditions
+  are properties of the running model and provider, which no config file states; a machine
+  pinned below that tag is on the older rule, where tool search applied only above 100 tools or
+  behind a feature flag. **`config.toml` exposes no switch** — the two keys that once forced
+  the behaviour, `tool_search` and `tool_search_always_defer_mcp_tools`, are marked removed and
+  skipped when the features table is applied, though both still appear in the published config
+  schema.
+- **VS Code** — conditions, not a verdict, and the only one of the three whose record does not
+  amount to a default. Two documented facts share one numeral. A chat request "can have a
+  maximum of **128 tools** enabled at a time" — a cap, and exceeding it is an error. And
+  `github.copilot.chat.virtualTools.threshold`, an experimental setting defaulting to 128:
+  above that count, virtual tools group the set for the model to activate on demand; the
+  settings reference states no ceiling for it and describes it as the way to go
+  beyond the 128-tool limit (the agent tools documentation and the AI settings reference on
+  code.visualstudio.com, both read **2026-09-09**). Separately, `chat.agentHost.copilot.toolSearch.enabled` defaults to **true** in
+  `src/vs/platform/agentHost/common/copilotCliConfig.ts` and defers MCP and non-core tools
+  behind a tool-search tool, gated by an allowlist in
+  `src/vs/platform/agentHost/node/copilot/toolSearchDeferral.ts` to the GPT-5.4, 5.5 and 5.6
+  families and Claude 4.5 or later
+  ([microsoft/vscode#326213](https://github.com/microsoft/vscode/pull/326213), merged
+  2026-07-23; source read **2026-09-07**). Left open, and stated as such: at or below 128 tools
+  nothing documented defers, and the cap is an error rather than a saving; **which VS Code
+  release runs Copilot sessions on that agent host by default is not established here**; and
+  the agent host's settings appear nowhere in the published settings documentation, though
+  the virtual-tools threshold now does, as experimental (read **2026-09-09** — an earlier
+  read of 2026-09-07 found none of them). Both switches
+  live in VS Code's own settings rather than in the `.vscode/mcp.json` this audit reads.
+
 **Where the cost is paid in full.** No default deferral is on record for Claude Desktop,
-Cursor, VS Code, Windsurf, Codex CLI, Gemini CLI, Zed, Kiro or Goose: for a config read by one
-of those, every request carries the whole total. Each client's own configuration page was
-read on 2026-09-06 and says nothing about deferring tool definitions — Windsurf's states a
-cap of 100 tools, which is a different thing. That is an absence of a record about the
-client, not a measurement of it, and `audit` prints it in those words — the same rule this
-project follows for every value it has not observed. A config passed as `--config <path>` is read the same way, because which client
-reads that file is not knowable from the file.
+Windsurf, Gemini CLI, Zed, Kiro or Goose: for a config read by one of those, every request
+carries the whole total. Each client's own configuration page was read on 2026-09-06 and says
+nothing about deferring tool definitions — Windsurf's states a cap of 100 tools, which is a
+different thing. Under the wider rule this is now an absence that was searched for rather than
+an absence on one page: the three that are open source — Gemini CLI, Zed and Goose — were
+searched for a tool-search or deferral mechanism on 2026-09-07, and none was found, while
+Claude Desktop, Windsurf and Kiro are closed and only their pages have been read. That is an
+absence of a record about the client, not a measurement of it, and `audit` prints it in those
+words — the same rule this project follows for every value it has not observed. A config passed
+as `--config <path>` is read the same way, because which client reads that file is not knowable
+from the file.
 
 **Where it is deferred away.** Claude Code defers MCP tool definitions by default, through
 its **tool search**: the definitions are not in context at session start and load when the
@@ -305,7 +485,9 @@ in it, does not spoil an answer that variable would not have decided:
 
 | read | value | posture |
 |---|---|---|
-| 1. `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS` | any non-empty value | tool search off — loads up front. Read first because it cannot be overridden by `ENABLE_TOOL_SEARCH` |
+| 1. `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS` | `1`, `true`, `yes` or `on`, in any casing | tool search off — loads up front. Read first because it cannot be overridden by `ENABLE_TOOL_SEARCH` |
+| | `0`, `false`, `no` or `off`, in any casing | it turned nothing off, so it decides nothing and the read moves on to `ENABLE_TOOL_SEARCH` |
+| | any other value | **unrecognized** — no posture is claimed from it, the same as for an undocumented `ENABLE_TOOL_SEARCH` value below |
 | 2. `ENABLE_TOOL_SEARCH` | `true` | every definition deferred, at any size |
 | | `false` | loads up front |
 | | `auto` / `auto:N` (N = 0–100) | deferred once the definitions reach 10% / N% of the context window |
@@ -315,13 +497,24 @@ in it, does not spoil an answer that variable would not have decided:
 | | otherwise / nothing set anywhere | the documented default: every definition deferred, no threshold |
 | the entry itself | `alwaysLoad: true` | loads at session start whatever the setting says — read from the entry, named with its tokens, and left out of any threshold comparison |
 
+`CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS` is a boolean flag in the client, not a marker whose
+presence alone is the signal, so a value it does not read as true leaves tool search on and the
+read continues. Taking its presence for its meaning is how a machine that had set it to `0` was
+told that every request carries these tokens.
+
 **Two places set them, and both are read.** Claude Code takes those variables from the shell
 it starts in *and* from the `env` block of its own settings files, so `audit` opens all of
 them: the managed settings file for the platform
 (`/Library/Application Support/ClaudeCode/managed-settings.json` on macOS,
-`/etc/claude-code/managed-settings.json` on Linux, `%ProgramData%\ClaudeCode\managed-settings.json` on Windows),
+`/etc/claude-code/managed-settings.json` on Linux, `C:\Program Files\ClaudeCode\managed-settings.json` on
+Windows — not `%ProgramData%\ClaudeCode\managed-settings.json`, which the vendor names as a legacy path
+Claude Code does not read, and which this opened instead until 2026-09-08), every
+`managed-settings.d/*.json` drop-in beside it,
 `<cwd>/.claude/settings.local.json`, `<cwd>/.claude/settings.json`, then
-`~/.claude/settings.json`. Among the settings files the first that sets a variable wins —
+`~/.claude/settings.json`. The managed file and its drop-ins are **one** source, documented as
+merged together, and the vendor does not say which file inside that pair wins: where they set the
+same variable to different values the posture is refused rather than decided by an order this has
+no source for. Among the settings files the first that sets a variable wins —
 sets it at all, readably or not, so a readable value above an unreadable one is still the
 value in force, and an unreadable one beneath it decides nothing. Every place consulted is
 published with what it set — **by name, never by value** — and each is marked read, absent,
@@ -344,7 +537,36 @@ listed condition.
 **Configs one session loads together face the question together.** Claude Code reads
 `~/.claude.json` and `<cwd>/.mcp.json` into one session, so the threshold question is put to
 their sum and answered once. Per-config totals are still never merged (see above): the sum
-exists for the threshold and nowhere else.
+exists for the threshold and nowhere else. Where the managed MCP file below is deployed, the
+session is that file alone, and the sum is its. The session is also the unit `--budget` gates
+(decided **2026-09-09**): per-file totals stay file facts, the gate reads the costliest
+session, and a server the denylist removes is nobody's bill.
+
+**The managed tier owns the server list, where it exists.** `managed-mcp.json` — one fixed
+path per platform, in the same system directory as the managed settings file and, unlike it,
+with no drop-in directory — gives an organisation exclusive control: a claude-code session
+loads only the servers that file defines, plus in-process servers the launching app
+registers, which no config file describes; deployed with an empty server map it disables MCP
+outright (code.claude.com/docs/en/managed-mcp.md, §Exclusive control, read **2026-09-09**).
+`audit` reads that path, says which state it found, and keeps measuring the user and project
+configs it suppresses — their totals are facts about those files — while every session-level
+claim moves to the managed file. A managed file that exists and cannot be read is its own
+refusal: which servers a session loads cannot be said, and the report says that instead of
+picking a side.
+
+**The allowlist and the denylist, and why only one of them is applied.** `allowedMcpServers`
+and `deniedMcpServers` filter what loads, and they live in the same settings files this audit
+already opens — and in tiers it does not: server-managed settings, an MDM profile, a registry
+key. The two lists are treated by direction. A server matching a **deny** entry read here is
+left out of the session's claims: the vendor says nothing overrides a deny, so that much is
+certain, and a deny entry in an unread tier could only lower the bill further. An **allow**
+verdict is reported and never subtracted: allowlists merge as a union across scopes, so an
+entry in an unread tier can only broaden what loads, and removing a server for failing the
+entries read here could understate a session. Neither list ever touches a file's own total.
+An entry carrying `${}` expansion is returned as set-but-unevaluated — the two sides expand
+from environments this audit does not hold — and `allowManagedMcpServersOnly` narrows the
+counted allowlist to the managed tier when a managed source sets it readably (same page,
+§Policy-based control and §How a server is evaluated, read **2026-09-09**).
 
 **The threshold comparison is a range, not a point.** Only `auto`/`auto:N` makes size decide
 anything. There the audit's number and the threshold are counted in different units — wire
@@ -361,7 +583,12 @@ is unknown rather than nothing; when the place that would decide sets the variab
 this cannot read, since it is set there and dropping it would argue from a silence that is
 not silent; when `ENABLE_TOOL_SEARCH` holds an undocumented value; when the threshold range
 straddles the line; and when the stack's total could not be established because two
-configured entries collapsed onto one measurement.
+configured entries collapsed onto one measurement. The first four are the ways a machine can
+fail to state a posture readably, which is four refusals and not one: collapsing them into a
+single "unknown" would hide that three of the four are answerable by the reader, who can look
+at the file this audit could not. The managed tier adds a refusal of the same kind: a
+`managed-mcp.json` that exists and cannot be read refuses the session's composition itself,
+and an allow or deny entry that is set but not evaluable here is printed as exactly that.
 
 **Deferral is not a blanket discount.** Even where the posture defers, the full number is
 paid on a Microsoft Foundry deployment hosted on Azure (which rejects tool search
@@ -376,7 +603,10 @@ deferring client *more* than an eager one.
 before anything is launched, and the answer is the row: an endpoint that answers is measured
 through the `mcp-remote` bridge and joins the total as any server does; one that answers
 `401` or `403` is `auth-walled`, quoting the status and the `WWW-Authenticate` header it sent,
-with the URL, and makes the total a floor; one that gives no MCP answer is `unreachable`, with
+with the URL, and makes the total a floor; one that answers by refusing the revision the
+request carries is `protocol-mismatch`, quoting the revisions it says it does speak when it
+names them — the endpoint works, the refusal is about what this harness sends, and the total
+is a floor for the same reason; one that gives no MCP answer is `unreachable`, with
 the reason. The probe exists because the bridge alone would open a browser against an
 OAuth-walled endpoint on a developer machine, and would read `timeout` in a headless run — a
 word that blames the clock for a credential. Probed 2026-09-06: Linear, Zapier and Vercel
@@ -384,18 +614,44 @@ answer `401` with a `WWW-Authenticate: Bearer …` header; DeepWiki, Microsoft L
 Docs and Hugging Face answer `200`. Header values an entry carries are sent
 and never reported; only their names are.
 
-**Source, and its date.** All of the above is a model of another product's documented
+**Source, and its date.** Most of the above is a model of another product's documented
 behaviour, not an observation of it: Claude Code MCP documentation, §"Scale with MCP tool
 search", read **2026-08-20** and re-read **2026-09-06**. On the re-read the value table
 stands as quoted, and four things moved around it, each recorded in
 `src/audit/deferral.ts`: tool search is on by default on Google Cloud's Agent Platform for
 the Claude 4.5 generation and later (before v2.1.221 it was off there for every model);
 managed settings can keep tool search on under `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS` from
-v2.1.227, an override this audit does not read, so that variable still resolves as "off"
-here; `alwaysLoad` is an entry field on every server type, now read as above; and tool
+v2.1.227, which **is** read here as of 2026-09-08 and is described below; `alwaysLoad` is an
+entry field on every server type, now read as above; and tool
 descriptions and server instructions are truncated at 2 KB each. Nothing here measured
 Claude Code deferring or not deferring anything. If that documentation changes, this section
 and `src/audit/deferral.ts` are what have to change with it.
+
+**The organisation override, and why it is refused rather than answered.** From Claude Code
+v2.1.227 an organisation can keep tool search on under the very variable that turns it off, through
+managed settings — `code.claude.com/docs/en/llm-gateway-protocol.md`, read **2026-09-08**. The
+value that arms it appears in no vendor document, so this names none and claims nothing about what
+it does. What it does say: the administrator tier is read, and where that tier sets
+`ENABLE_TOOL_SEARCH` to a value the vendor does not document, the disabling variable is no longer
+what decides, so the posture is refused and the value is printed for the reader to check. Two of
+the override's own conditions are not readable from a file either — the same page says it has no
+effect on a cloud provider, or when signed in through a Claude apps gateway. The audit reads one of
+the four administrator sources the vendor documents; remote settings, MDM policy and a policy
+helper are not opened, and a helper's output replaces the file tier entirely. Every one of those
+misses can only make this report **over**-state what a request carries, never understate it.
+
+**One rule above is not a quotation, and it is marked.** How
+`CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS` is read comes from two sources rather than one.
+`code.claude.com/docs/en/env-vars.md`, read **2026-09-08**, states the convention: for a
+variable that turns a behaviour on or off, `1` or `true` turns it on and `0` or `false` turns
+it off, in any casing. That page also names the variables which instead read any non-empty
+value, and this is not one of them. The remaining values it accepts — `yes`, `on`, `no`, `off`
+— were read out of the Claude Code v2.1.233 bundle installed on the machine this was written
+on, dated **2026-09-08**, and the boolean reading was confirmed by running that client under
+each value and reading whether its startup event listed the tool-search tool. That is one
+build on one machine, and it is the only claim in this section resting on something other than
+a published page. If it is wrong, it is wrong in the direction that over-states what a request
+carries.
 
 ## CLI cross-check <a id="cli-cross-check"></a>
 

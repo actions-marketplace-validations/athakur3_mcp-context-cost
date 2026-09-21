@@ -1,14 +1,16 @@
 # obsidian — context cost
 
-**2,062 tokens** across 15 tools — *light* (1–5K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**2,062 tokens** across 15 tools — *light* (1–5K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
+
+An Anthropic request carries 2,062 of those tokens as tool definitions, and Claude counts those at **3,861**.
 
 | | |
 |---|---|
-| server (self-reported) | mcp-obsidian v1.29.1 |
+| server (self-reported) | mcp-obsidian v1.30.0 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `uvx --with "mcp\<2" mcp-obsidian` |
-| isolation | docker · ghcr.io/astral-sh/uv:python3.12-bookworm-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · ghcr.io/astral-sh/uv:python3.12-bookworm-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | OBSIDIAN_API_KEY |
 | canonical SHA-256 | `6064f85a43ae17b2da72d1b87fd9435879e8b42bc320e1347e382f5c8a61b499` |
 | category | community |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | obsidian_complex_search | 492 | 23.9% | 241 | 198 |
 | obsidian_patch_content | 263 | 12.8% | 69 | 182 |
@@ -38,7 +40,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -57,6 +59,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-26 | 2,062 | 15 | not recorded | docker | +930 |
 | 2026-09-03 | 2,062 | 15 | not recorded | docker | no change |
 | 2026-09-04 | 2,062 | 15 | 1.29.1 | docker | no change |
+| 2026-09-16 | 2,062 | 15 | 1.30.0 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

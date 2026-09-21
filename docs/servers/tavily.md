@@ -2,13 +2,15 @@
 
 **1,653 tokens** across 5 tools — *light* (1–5K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
 
+An Anthropic request carries 1,653 of those tokens as tool definitions, and Claude counts those at **3,096**.
+
 | | |
 |---|---|
 | server (self-reported) | tavily-mcp v0.2.22 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y tavily-mcp` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | TAVILY_API_KEY |
 | canonical SHA-256 | `b2bcd45339fe42caa0f55e5ca1196091b2dcda4b868fedd209177b54f2ef51ef` |
 | category | vendor-official |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | tavily_search | 615 | 37.2% | 29 | 574 |
 | tavily_crawl | 412 | 24.9% | 20 | 379 |
@@ -28,7 +30,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|

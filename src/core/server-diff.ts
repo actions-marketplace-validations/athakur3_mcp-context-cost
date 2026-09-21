@@ -23,6 +23,7 @@
  */
 import { attribute, vectorEntryOf, type ToolAttribution } from './regression.js';
 import type { Measurement } from './types.js';
+import { count, signed } from './format.js';
 
 export interface MeasuredSide {
   tokens: number;
@@ -83,7 +84,11 @@ export function sameServer(baseline: Measurement, current: Measurement): boolean
   return a === b;
 }
 
-export function diffServer(name: string, baseline: Measurement | null, current: Measurement): ServerDiff {
+export function diffServer(
+  name: string,
+  baseline: Measurement | null,
+  current: Measurement,
+): ServerDiff {
   const before = sideOf(baseline);
   const after = sideOf(current);
   const base: ServerDiff = {
@@ -148,9 +153,9 @@ export interface ServerGate {
 
 export interface GateLimits {
   /** Ceiling on this measurement's absolute cost. */
-  budget?: number;
+  budget?: number | undefined;
   /** Ceiling on the increase over the baseline. Fails when the change cannot be established. */
-  maxIncrease?: number;
+  maxIncrease?: number | undefined;
 }
 
 /**
@@ -163,7 +168,10 @@ export function evaluateServerGate(diff: ServerDiff, limits: GateLimits): Server
 
   if (typeof limits.budget === 'number') {
     if (!diff.after) {
-      return { pass: false, failure: `BUDGET FAIL: nothing was measured, so the budget could not be checked.` };
+      return {
+        pass: false,
+        failure: `BUDGET FAIL: nothing was measured, so the budget could not be checked.`,
+      };
     }
     if (diff.after.tokens > limits.budget) {
       return {
@@ -208,21 +216,28 @@ export function evaluateServerGate(diff: ServerDiff, limits: GateLimits): Server
 
 /** The human-readable diff, printed whether or not a gate was asked for. */
 export function formatServerDiff(diff: ServerDiff): string {
-  const n = (v: number) => v.toLocaleString('en-US');
-  const signed = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${n(Math.abs(v))}`;
+  const n = count;
   const lines: string[] = [];
 
   if (!diff.exact) {
     lines.push(`  ${diff.name}: change not established — ${diff.problem}`);
-    if (diff.after) lines.push(`    measured now: ${n(diff.after.tokens)} tokens across ${diff.after.toolCount} tools`);
-    if (diff.before) lines.push(`    baseline:     ${n(diff.before.tokens)} tokens across ${diff.before.toolCount} tools`);
+    if (diff.after)
+      lines.push(
+        `    measured now: ${n(diff.after.tokens)} tokens across ${diff.after.toolCount} tools`,
+      );
+    if (diff.before)
+      lines.push(
+        `    baseline:     ${n(diff.before.tokens)} tokens across ${diff.before.toolCount} tools`,
+      );
     return lines.join('\n');
   }
 
   const b = diff.before!;
   const a = diff.after!;
   if (diff.identical) {
-    lines.push(`  ${diff.name}: unchanged — byte-identical to the baseline capture (${n(a.tokens)} tokens).`);
+    lines.push(
+      `  ${diff.name}: unchanged — byte-identical to the baseline capture (${n(a.tokens)} tokens).`,
+    );
     return lines.join('\n');
   }
 
@@ -280,7 +295,10 @@ export function formatServerDiff(diff: ServerDiff): string {
 }
 
 /** Parse a baseline measurement.json. A malformed file is a usage error, not a pass. */
-export function parseBaselineMeasurement(text: string): { measurement: Measurement | null; problem?: string } {
+export function parseBaselineMeasurement(text: string): {
+  measurement: Measurement | null;
+  problem?: string;
+} {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);

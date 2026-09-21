@@ -1,14 +1,16 @@
 # mysql — context cost
 
-**393 tokens** across 3 tools — *lean* (< 1K). Measured 2026-09-05 under [methodology v1.0](../METHODOLOGY.html).
+**393 tokens** across 3 tools — *lean* (< 1K). Measured 2026-09-09 under [methodology v1.0](../METHODOLOGY.html).
+
+An Anthropic request carries 334 of those tokens as tool definitions, and Claude counts those at **868**.
 
 | | |
 |---|---|
-| server (self-reported) | mysql_mcp_server v1.29.1 |
+| server (self-reported) | mysql_mcp_server v1.30.0 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `uvx --from mysql-mcp-server mysql_mcp_server` |
-| isolation | docker · ghcr.io/astral-sh/uv:python3.12-bookworm-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · ghcr.io/astral-sh/uv:python3.12-bookworm-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE |
 | canonical SHA-256 | `48f53cd914e3137feabfb3087abdb3bb54df46907d605a4cf97fac272bba2afb` |
 | category | community |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | get_table_sample | 139 | 35.4% | 47 | 61 |
 | get_schema_info | 133 | 33.8% | 68 | 34 |
@@ -26,7 +28,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -44,6 +46,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-19 | 393 | 3 | not recorded | docker | no change |
 | 2026-09-04 | 393 | 3 | 1.29.1 | docker | no change |
 | 2026-09-05 | 393 | 3 | 1.29.1 | docker | no change |
+| 2026-09-09 | 393 | 3 | 1.30.0 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

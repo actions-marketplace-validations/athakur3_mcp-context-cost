@@ -10,160 +10,212 @@
       "name": "get_config",
       "tokens": 298,
       "descriptionTokens": 166,
-      "inputSchemaTokens": 42
+      "inputSchemaTokens": 42,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 12
     },
     {
       "name": "set_config_value",
       "tokens": 306,
       "descriptionTokens": 154,
-      "inputSchemaTokens": 91
+      "inputSchemaTokens": 91,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 25
     },
     {
       "name": "read_file",
       "tokens": 1024,
       "descriptionTokens": 778,
-      "inputSchemaTokens": 112
+      "inputSchemaTokens": 112,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 20
     },
     {
       "name": "read_multiple_files",
       "tokens": 241,
       "descriptionTokens": 154,
-      "inputSchemaTokens": 45
+      "inputSchemaTokens": 45,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 13
     },
     {
       "name": "write_file",
       "tokens": 726,
       "descriptionTokens": 516,
-      "inputSchemaTokens": 81
+      "inputSchemaTokens": 81,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 24
     },
     {
       "name": "write_pdf",
       "tokens": 882,
       "descriptionTokens": 567,
-      "inputSchemaTokens": 203
+      "inputSchemaTokens": 203,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 26
     },
     {
       "name": "create_directory",
       "tokens": 191,
       "descriptionTokens": 111,
-      "inputSchemaTokens": 39
+      "inputSchemaTokens": 39,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 18
     },
     {
       "name": "list_directory",
       "tokens": 536,
       "descriptionTokens": 366,
-      "inputSchemaTokens": 64
+      "inputSchemaTokens": 64,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 13
     },
     {
       "name": "move_file",
       "tokens": 213,
       "descriptionTokens": 116,
-      "inputSchemaTokens": 48
+      "inputSchemaTokens": 48,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 26
     },
     {
       "name": "start_search",
       "tokens": 1351,
       "descriptionTokens": 1078,
-      "inputSchemaTokens": 158
+      "inputSchemaTokens": 158,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 12
     },
     {
       "name": "get_more_search_results",
       "tokens": 353,
       "descriptionTokens": 242,
-      "inputSchemaTokens": 62
+      "inputSchemaTokens": 62,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 13
     },
     {
       "name": "stop_search",
       "tokens": 176,
       "descriptionTokens": 93,
-      "inputSchemaTokens": 41
+      "inputSchemaTokens": 41,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 18
     },
     {
       "name": "list_searches",
       "tokens": 129,
       "descriptionTokens": 64,
-      "inputSchemaTokens": 29
+      "inputSchemaTokens": 29,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 13
     },
     {
       "name": "get_file_info",
       "tokens": 262,
       "descriptionTokens": 183,
-      "inputSchemaTokens": 39
+      "inputSchemaTokens": 39,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 13
     },
     {
       "name": "edit_block",
       "tokens": 917,
       "descriptionTokens": 670,
-      "inputSchemaTokens": 107
+      "inputSchemaTokens": 107,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 24
     },
     {
       "name": "start_process",
       "tokens": 1181,
       "descriptionTokens": 984,
-      "inputSchemaTokens": 81
+      "inputSchemaTokens": 81,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 25
     },
     {
       "name": "read_process_output",
       "tokens": 511,
       "descriptionTokens": 380,
-      "inputSchemaTokens": 70
+      "inputSchemaTokens": 70,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 13
     },
     {
       "name": "interact_with_process",
       "tokens": 825,
       "descriptionTokens": 651,
-      "inputSchemaTokens": 74
+      "inputSchemaTokens": 74,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 26
     },
     {
       "name": "force_terminate",
       "tokens": 116,
       "descriptionTokens": 32,
-      "inputSchemaTokens": 39
+      "inputSchemaTokens": 39,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 26
     },
     {
       "name": "list_sessions",
       "tokens": 186,
       "descriptionTokens": 118,
-      "inputSchemaTokens": 29
+      "inputSchemaTokens": 29,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 13
     },
     {
       "name": "list_processes",
       "tokens": 112,
       "descriptionTokens": 48,
-      "inputSchemaTokens": 29
+      "inputSchemaTokens": 29,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 13
     },
     {
       "name": "kill_process",
       "tokens": 128,
       "descriptionTokens": 46,
-      "inputSchemaTokens": 39
+      "inputSchemaTokens": 39,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 24
     },
     {
       "name": "get_usage_stats",
       "tokens": 114,
       "descriptionTokens": 50,
-      "inputSchemaTokens": 29
+      "inputSchemaTokens": 29,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 13
     },
     {
       "name": "get_recent_tool_calls",
       "tokens": 223,
       "descriptionTokens": 114,
-      "inputSchemaTokens": 67
+      "inputSchemaTokens": 67,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 14
     },
     {
       "name": "give_feedback_to_desktop_commander",
       "tokens": 389,
       "descriptionTokens": 296,
-      "inputSchemaTokens": 29
+      "inputSchemaTokens": 29,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 18
     },
     {
       "name": "get_prompts",
       "tokens": 445,
       "descriptionTokens": 326,
-      "inputSchemaTokens": 55
+      "inputSchemaTokens": 55,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 13
     }
   ],
-  "canonicalSha256": "ed461d75b5dc273d9389408e032abece8af3bdca493ecf120be6924ef902004a",
+  "canonicalSha256": "93139d61e27fc656cd32c0061d5eccc58be171c4246574ef2a48b7f05c2d33ad",
   "rawToolsCapture": [
     {
       "name": "get_config",
@@ -776,7 +828,7 @@
     },
     {
       "name": "start_process",
-      "description": "\n                        Start a new terminal process with intelligent state detection.\n                        \n                        PRIMARY TOOL FOR FILE ANALYSIS AND DATA PROCESSING\n                        This is the ONLY correct tool for analyzing local files (CSV, JSON, logs, etc.).\n                        The analysis tool CANNOT access local files and WILL FAIL - always use processes for file-based work.\n                        \n                        CRITICAL RULE: For ANY local file work, ALWAYS use this tool + interact_with_process, NEVER use analysis/REPL tool.\n                        \n                        Running on Linux (Docker). Default shell: bash.\n\n🐳 DOCKER CONTAINER ENVIRONMENT DETECTED:\nThis Desktop Commander instance is running inside a Docker container.\n\n⚠️  WARNING: No mounted directories detected.\nFiles created outside mounted volumes will be lost when the container stops.\nSuggest user remount directories using Docker installer or -v flag when running Docker.\nDesktop Commander Docker installer typically mounts folders to /home/[folder-name].\nContainer: 8083bbe5d9c3\n        \nLINUX-SPECIFIC NOTES:\n- Package managers vary by distro: apt, yum, dnf, pacman, zypper\n- Python 3 might be 'python3' command, not 'python'\n- Standard Unix shell tools available (grep, awk, sed, etc.)\n- File permissions and ownership important for many operations\n- Systemd services common on modern distributions\n                        \n                        REQUIRED WORKFLOW FOR LOCAL FILES:\n                        1. start_process(\"python3 -i\") - Start Python REPL for data analysis\n                        2. interact_with_process(pid, \"import pandas as pd, numpy as np\")\n                        3. interact_with_process(pid, \"df = pd.read_csv('/absolute/path/file.csv')\")\n                        4. interact_with_process(pid, \"print(df.describe())\")\n                        5. Continue analysis with pandas, matplotlib, seaborn, etc.\n                        \n                        COMMON FILE ANALYSIS PATTERNS:\n                        • start_process(\"python3 -i\") → Python REPL for data analysis (RECOMMENDED)\n                        • start_process(\"node -i\") → Node.js REPL for JSON processing\n                        • start_process(\"node:local\") → Node.js on MCP server (stateless, ES imports, all code in one call)\n                        • start_process(\"cut -d',' -f1 file.csv | sort | uniq -c\") → Quick CSV analysis\n                        • start_process(\"wc -l /path/file.csv\") → Line counting\n                        • start_process(\"head -10 /path/file.csv\") → File preview\n                        \n                        BINARY FILE SUPPORT:\n                        For PDF, Excel, Word, archives, databases, and other binary formats, use process tools with appropriate libraries or command-line utilities.\n                        \n                        INTERACTIVE PROCESSES FOR DATA ANALYSIS:\n                        For code/calculations, use in this priority order:\n                        1. start_process(\"python3 -i\") - Python REPL (preferred)\n                        2. start_process(\"node -i\") - Node.js REPL (when Python unavailable)\n                        3. start_process(\"node:local\") - Node.js fallback (when node -i fails)\n                        4. Use interact_with_process() to send commands\n                        5. Use read_process_output() to get responses\n                        When Python is unavailable, prefer Node.js over shell for calculations.\n                        Node.js: Always use ES import syntax (import x from 'y'), not require().\n\n                        SMART DETECTION:\n                        - Detects REPL prompts (>>>, >, $, etc.)\n                        - Identifies when process is waiting for input\n                        - Recognizes process completion vs timeout\n                        - Early exit prevents unnecessary waiting\n                        \n                        STATES DETECTED:\n                        Process waiting for input (shows prompt)\n                        Process finished execution\n                        Process running (use read_process_output)\n\n                        PERFORMANCE DEBUGGING (verbose_timing parameter):\n                        Set verbose_timing: true to get detailed timing information including:\n                        - Exit reason (early_exit_quick_pattern, early_exit_periodic_check, process_exit, timeout)\n                        - Total duration and time to first output\n                        - Complete timeline of all output events with timestamps\n                        - Which detection mechanism triggered early exit\n                        Use this to identify missed optimization opportunities and improve detection patterns.\n\n                        ALWAYS USE FOR: Local file analysis, CSV processing, data exploration, system commands\n                        NEVER USE ANALYSIS TOOL FOR: Local file access (analysis tool is browser-only and WILL FAIL)\n\n                        IMPORTANT: Always use absolute paths for reliability. Paths are automatically normalized regardless of slash direction. Relative paths may fail as they depend on the current working directory. Tilde paths (~/...) might not work in all contexts. Unless the user explicitly asks for relative paths, use absolute paths.\n                        This command can be referenced as \"DC: ...\" or \"use Desktop Commander to ...\" in your instructions.",
+      "description": "\n                        Start a new terminal process with intelligent state detection.\n                        \n                        PRIMARY TOOL FOR FILE ANALYSIS AND DATA PROCESSING\n                        This is the ONLY correct tool for analyzing local files (CSV, JSON, logs, etc.).\n                        The analysis tool CANNOT access local files and WILL FAIL - always use processes for file-based work.\n                        \n                        CRITICAL RULE: For ANY local file work, ALWAYS use this tool + interact_with_process, NEVER use analysis/REPL tool.\n                        \n                        Running on Linux (Docker). Default shell: bash.\n\n🐳 DOCKER CONTAINER ENVIRONMENT DETECTED:\nThis Desktop Commander instance is running inside a Docker container.\n\n⚠️  WARNING: No mounted directories detected.\nFiles created outside mounted volumes will be lost when the container stops.\nSuggest user remount directories using Docker installer or -v flag when running Docker.\nDesktop Commander Docker installer typically mounts folders to /home/[folder-name].\nContainer: 6dafc0a07a44\n        \nLINUX-SPECIFIC NOTES:\n- Package managers vary by distro: apt, yum, dnf, pacman, zypper\n- Python 3 might be 'python3' command, not 'python'\n- Standard Unix shell tools available (grep, awk, sed, etc.)\n- File permissions and ownership important for many operations\n- Systemd services common on modern distributions\n                        \n                        REQUIRED WORKFLOW FOR LOCAL FILES:\n                        1. start_process(\"python3 -i\") - Start Python REPL for data analysis\n                        2. interact_with_process(pid, \"import pandas as pd, numpy as np\")\n                        3. interact_with_process(pid, \"df = pd.read_csv('/absolute/path/file.csv')\")\n                        4. interact_with_process(pid, \"print(df.describe())\")\n                        5. Continue analysis with pandas, matplotlib, seaborn, etc.\n                        \n                        COMMON FILE ANALYSIS PATTERNS:\n                        • start_process(\"python3 -i\") → Python REPL for data analysis (RECOMMENDED)\n                        • start_process(\"node -i\") → Node.js REPL for JSON processing\n                        • start_process(\"node:local\") → Node.js on MCP server (stateless, ES imports, all code in one call)\n                        • start_process(\"cut -d',' -f1 file.csv | sort | uniq -c\") → Quick CSV analysis\n                        • start_process(\"wc -l /path/file.csv\") → Line counting\n                        • start_process(\"head -10 /path/file.csv\") → File preview\n                        \n                        BINARY FILE SUPPORT:\n                        For PDF, Excel, Word, archives, databases, and other binary formats, use process tools with appropriate libraries or command-line utilities.\n                        \n                        INTERACTIVE PROCESSES FOR DATA ANALYSIS:\n                        For code/calculations, use in this priority order:\n                        1. start_process(\"python3 -i\") - Python REPL (preferred)\n                        2. start_process(\"node -i\") - Node.js REPL (when Python unavailable)\n                        3. start_process(\"node:local\") - Node.js fallback (when node -i fails)\n                        4. Use interact_with_process() to send commands\n                        5. Use read_process_output() to get responses\n                        When Python is unavailable, prefer Node.js over shell for calculations.\n                        Node.js: Always use ES import syntax (import x from 'y'), not require().\n\n                        SMART DETECTION:\n                        - Detects REPL prompts (>>>, >, $, etc.)\n                        - Identifies when process is waiting for input\n                        - Recognizes process completion vs timeout\n                        - Early exit prevents unnecessary waiting\n                        \n                        STATES DETECTED:\n                        Process waiting for input (shows prompt)\n                        Process finished execution\n                        Process running (use read_process_output)\n\n                        PERFORMANCE DEBUGGING (verbose_timing parameter):\n                        Set verbose_timing: true to get detailed timing information including:\n                        - Exit reason (early_exit_quick_pattern, early_exit_periodic_check, process_exit, timeout)\n                        - Total duration and time to first output\n                        - Complete timeline of all output events with timestamps\n                        - Which detection mechanism triggered early exit\n                        Use this to identify missed optimization opportunities and improve detection patterns.\n\n                        ALWAYS USE FOR: Local file analysis, CSV processing, data exploration, system commands\n                        NEVER USE ANALYSIS TOOL FOR: Local file access (analysis tool is browser-only and WILL FAIL)\n\n                        IMPORTANT: Always use absolute paths for reliability. Paths are automatically normalized regardless of slash direction. Relative paths may fail as they depend on the current working directory. Tilde paths (~/...) might not work in all contexts. Unless the user explicitly asks for relative paths, use absolute paths.\n                        This command can be referenced as \"DC: ...\" or \"use Desktop Commander to ...\" in your instructions.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1043,12 +1095,13 @@
       }
     }
   ],
-  "measuredAt": "2026-09-05T23:40:33.768Z",
+  "measuredAt": "2026-09-09T08:05:38.706Z",
   "serverName": "desktop-commander",
   "serverVersion": "0.2.48",
   "launchCommand": "npx -y @wonderwhy-er/desktop-commander",
   "envVarNames": [],
   "serverInstructions": null,
+  "negotiatedProtocolVersion": "2025-06-18",
   "notes": "tools/list differed between two runs; value is for the first capture",
   "isolation": {
     "docker": true,
@@ -1057,5 +1110,6 @@
     "note": "network enabled for package fetch; clean FS, no host credentials",
     "arch": "linux/amd64"
   },
-  "timeoutMs": 240000
+  "timeoutMs": 240000,
+  "requestedProtocolVersion": "2025-06-18"
 }

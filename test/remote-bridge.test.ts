@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:http';
 import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { probeRemote } from '../src/audit/remote.js';
 import { TSX_CLI } from './tsx.js';
+import { removeTempRoot } from './tmp.js';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -34,19 +35,27 @@ let url = '';
 beforeAll(async () => {
   const port = await freePort();
   url = `http://127.0.0.1:${port}/mcp`;
-  child = spawn('npx', ['-y', '@modelcontextprotocol/server-everything@2026.8.31', 'streamableHttp'], {
-    env: { ...process.env, PORT: String(port) },
-    stdio: ['ignore', 'ignore', 'pipe'],
-    detached: true,
-  });
+  child = spawn(
+    'npx',
+    ['-y', '@modelcontextprotocol/server-everything@2026.8.31', 'streamableHttp'],
+    {
+      env: { ...process.env, PORT: String(port) },
+      stdio: ['ignore', 'ignore', 'pipe'],
+      detached: true,
+    },
+  );
   let stderr = '';
   child.stderr?.on('data', (c) => (stderr += String(c)));
   const deadline = Date.now() + 180_000;
   for (;;) {
     const p = await probeRemote(url, { timeoutMs: 2_000 });
     if (p.kind === 'open') return;
-    if (child.exitCode !== null) throw new Error(`everything server exited ${child.exitCode}: ${stderr.slice(-500)}`);
-    if (Date.now() > deadline) throw new Error(`everything server never answered at ${url}: ${p.detail}; ${stderr.slice(-500)}`);
+    if (child.exitCode !== null)
+      throw new Error(`everything server exited ${child.exitCode}: ${stderr.slice(-500)}`);
+    if (Date.now() > deadline)
+      throw new Error(
+        `everything server never answered at ${url}: ${p.detail}; ${stderr.slice(-500)}`,
+      );
     await new Promise((r) => setTimeout(r, 1_000));
   }
 }, 200_000);
@@ -63,9 +72,20 @@ afterAll(() => {
 });
 
 describe('audit — an open http entry is a number', () => {
+  const tmpDirs: string[] = [];
+  afterEach(() => {
+    // The audit CLI ran with cwd inside this root — exactly the late-writer
+    // race removeTempRoot exists for.
+    for (const dir of tmpDirs.splice(0)) removeTempRoot(dir);
+  });
+
   it('measures the endpoint through the bridge, as a remote, and writes nothing', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mcp-audit-bridge-'));
-    writeFileSync(join(dir, 'mcp.json'), JSON.stringify({ mcpServers: { everything: { type: 'http', url } } }));
+    tmpDirs.push(dir);
+    writeFileSync(
+      join(dir, 'mcp.json'),
+      JSON.stringify({ mcpServers: { everything: { type: 'http', url } } }),
+    );
     const out = execFileSync(
       process.execPath,
       [TSX_CLI, join(repoRoot, 'src/cli.ts'), 'audit', '--config', join(dir, 'mcp.json'), '--json'],
@@ -74,11 +94,16 @@ describe('audit — an open http entry is a number', () => {
     const report = JSON.parse(out);
     const cfg = report.configs[0];
     expect(cfg.skipped).toEqual([]);
-    expect(cfg.servers[0]).toMatchObject({ name: 'everything', transport: 'remote', status: 'measured', url });
+    expect(cfg.servers[0]).toMatchObject({
+      name: 'everything',
+      transport: 'remote',
+      status: 'measured',
+      url,
+    });
     expect(cfg.servers[0].tokens).toBeGreaterThan(100);
     expect(cfg.servers[0].toolCount).toBeGreaterThan(3);
     expect(cfg.totalTokens).toBe(cfg.servers[0].tokens);
     expect(JSON.stringify(report)).not.toContain('remote-not-measurable');
-    expect(readdirSync(dir).sort()).toEqual(['mcp.json']);
+    expect(readdirSync(dir).toSorted()).toEqual(['mcp.json']);
   }, 260_000);
 });

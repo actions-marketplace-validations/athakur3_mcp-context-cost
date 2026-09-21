@@ -2,13 +2,15 @@
 
 **6,086 tokens** across 9 tools — *moderate* (5–15K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
 
+An Anthropic request carries 5,442 of those tokens as tool definitions, and Claude counts those at **9,481**.
+
 | | |
 |---|---|
 | server (self-reported) | Sentry MCP v0.39.0 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y @sentry/mcp-server@latest` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | SENTRY_ACCESS_TOKEN |
 | canonical SHA-256 | `11ef5fbfa5440a29377fedcd23abb764cf640ba03762911c8bfcd5b11a53aebd` |
 | category | vendor-official |
@@ -16,23 +18,23 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
-|---|---:|---:|---:|---:|
-| update_issue | 1,248 | 20.5% | 455 | 710 |
-| search_events | 1,127 | 18.5% | 459 | 597 |
-| search_issues | 853 | 14.0% | 377 | 412 |
-| analyze_issue_with_seer | 641 | 10.5% | 331 | 240 |
-| get_sentry_resource | 632 | 10.4% | 346 | 218 |
-| search_sentry_tools | 592 | 9.7% | 247 | 102 |
-| find_projects | 397 | 6.5% | 66 | 211 |
-| find_organizations | 308 | 5.1% | 70 | 68 |
-| execute_sentry_tool | 286 | 4.7% | 138 | 92 |
+| tool | tokens | share | description | input schema | output schema |
+|---|---:|---:|---:|---:|---:|
+| update_issue | 1,248 | 20.5% | 455 | 710 | 0 |
+| search_events | 1,127 | 18.5% | 459 | 597 | 0 |
+| search_issues | 853 | 14.0% | 377 | 412 | 0 |
+| analyze_issue_with_seer | 641 | 10.5% | 331 | 240 | 0 |
+| get_sentry_resource | 632 | 10.4% | 346 | 218 | 0 |
+| search_sentry_tools | 592 | 9.7% | 247 | 102 | 177 |
+| find_projects | 397 | 6.5% | 66 | 211 | 75 |
+| find_organizations | 308 | 5.1% | 70 | 68 | 124 |
+| execute_sentry_tool | 286 | 4.7% | 138 | 92 | 0 |
 
 Each tool is tokenized on its own, so the parts do not sum exactly to the whole: the array adds its own brackets and commas, and the tokenizer merges tokens across object boundaries. The badge number is always the count of the whole array, never a sum of parts.
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -48,7 +50,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 |---|---:|---:|---|---|---:|
 | 2026-08-16 | 6,455 | 9 | not recorded | not recorded | — |
 | 2026-08-18 | 6,455 | 9 | not recorded | docker | no change |
-| 2026-09-03 | 6,086 | 9 | not recorded | docker | -369 |
+| 2026-09-03 | 6,086 | 9 | not recorded | docker | −369 |
 | 2026-09-04 | 6,086 | 9 | 0.39.0 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.

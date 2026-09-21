@@ -1,6 +1,8 @@
 # elasticsearch — context cost
 
-**374 tokens** across 4 tools — *lean* (< 1K). Measured 2026-09-05 under [methodology v1.0](../METHODOLOGY.html).
+**374 tokens** across 4 tools — *lean* (< 1K). Measured 2026-09-09 under [methodology v1.0](../METHODOLOGY.html).
+
+An Anthropic request carries 374 of those tokens as tool definitions, and Claude counts those at **987**.
 
 | | |
 |---|---|
@@ -9,7 +11,7 @@
 | package | [superseded by v0.4.0 or later, shipped differently — see the upstream README](https://www.npmjs.com/package/@elastic/mcp-server-elasticsearch) — 0.3.1, read 2026-09-05 |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y @elastic/mcp-server-elasticsearch` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | ES_URL, ES_API_KEY |
 | canonical SHA-256 | `76a005f840c738f5788e7b5801fdc12194713fce1ed435ad500f891a2b2dd13c` |
 | category | vendor-official |
@@ -17,7 +19,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | search | 159 | 42.5% | 15 | 135 |
 | get_mappings | 76 | 20.3% | 8 | 56 |
@@ -28,7 +30,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -46,6 +48,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-19 | 374 | 4 | not recorded | docker | no change |
 | 2026-09-04 | 374 | 4 | 0.3.1 | docker | no change |
 | 2026-09-05 | 374 | 4 | 0.3.1 | docker | no change |
+| 2026-09-09 | 374 | 4 | 0.3.1 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

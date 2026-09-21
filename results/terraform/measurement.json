@@ -10,55 +10,73 @@
       "name": "get_latest_module_version",
       "tokens": 200,
       "descriptionTokens": 13,
-      "inputSchemaTokens": 139
+      "inputSchemaTokens": 139,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 33
     },
     {
       "name": "get_latest_provider_version",
       "tokens": 148,
       "descriptionTokens": 13,
-      "inputSchemaTokens": 87
+      "inputSchemaTokens": 87,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 33
     },
     {
       "name": "get_module_details",
       "tokens": 157,
       "descriptionTokens": 37,
-      "inputSchemaTokens": 71
+      "inputSchemaTokens": 71,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 36
     },
     {
       "name": "get_policy_details",
       "tokens": 156,
       "descriptionTokens": 37,
-      "inputSchemaTokens": 67
+      "inputSchemaTokens": 67,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 39
     },
     {
       "name": "get_provider_capabilities",
       "tokens": 305,
       "descriptionTokens": 138,
-      "inputSchemaTokens": 110
+      "inputSchemaTokens": 110,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 36
     },
     {
       "name": "get_provider_details",
       "tokens": 149,
       "descriptionTokens": 42,
-      "inputSchemaTokens": 55
+      "inputSchemaTokens": 55,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 38
     },
     {
       "name": "search_modules",
       "tokens": 240,
       "descriptionTokens": 129,
-      "inputSchemaTokens": 54
+      "inputSchemaTokens": 54,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 39
     },
     {
       "name": "search_policies",
       "tokens": 228,
       "descriptionTokens": 138,
-      "inputSchemaTokens": 31
+      "inputSchemaTokens": 31,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 39
     },
     {
       "name": "search_providers",
       "tokens": 484,
       "descriptionTokens": 132,
-      "inputSchemaTokens": 293
+      "inputSchemaTokens": 293,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 40
     }
   ],
   "canonicalSha256": "7205f4d29a1a97d6fa9d13d2e9b3c2ccc5e8dda8539cf836d5895380c56c4b3b",
@@ -329,16 +347,17 @@
       "name": "search_providers"
     }
   ],
-  "measuredAt": "2026-09-04T13:04:28.117Z",
+  "measuredAt": "2026-09-16T08:31:21.159Z",
   "serverName": "terraform-mcp-server",
   "serverVersion": "1.3.0",
   "launchCommand": "docker run -i --rm hashicorp/terraform-mcp-server",
   "envVarNames": [],
   "serverInstructions": "# Terraform MCP Server Tool Hints\n\nThe Terraform MCP server provides tools for generating better Terraform code through registry integration and automating workflows via HCP Terraform/Enterprise APIs.\n\n## Tool Usage Guidelines\n\n**BEFORE generating any Terraform code**: Query registries for latest provider/module versions and styling guidelines. When enterprise tools are enabled AND a Terraform token is provided, search private registries first, then fall back to public.\n\n**Provider Consistency**: All modules in a project must use compatible provider versions. Verify with get_provider_details before generating code.\n\n**Validation Flow**: Run terraform validate immediately after generation, then terraform plan only if validation passes. Use terraform fmt to format code as needed.\n\n**User Confirmation Required**: ALWAYS get explicit yes/no confirmation before: `create_run`, `apply_run`, `discard_run`, `cancel_run`.\n\n## Always Available Tools\n\n### Registry Tools (Always Available)\n\n- **Provider Discovery**: `get_latest_provider_version` (if unavailable in code) → `get_provider_capabilities` → `get_provider_details`\n  - `get_provider_capabilities` shows what types of resources, data sources, functions, and guides are available\n  \n- **Module Discovery**: `get_latest_module_version` (if unavailable in code) → `search_modules` → `get_module_details`\n\n- **Policy Discovery**: `search_policies` → `get_policy_details`\n\n- Use these to ensure generated code uses current versions and follows best practices\n\n## HCP Terraform/TFE Tools (When enterprise tools are enabled AND a Terraform token is provided)\n\n### Private Registry Tools\n- `search_private_providers` → `get_private_provider_details`\n- `search_private_modules` → `get_private_module_details`\n- Priority: Check private registries first when token present, public as fallback\n\n### Workspace Management\n- **Discovery**: `search_workspaces` (empty query returns all) → `get_workspace_details`\n- **Operations**: `create_workspace`, `update_workspace`, `delete_workspace_safely`, `force_unlock_workspace`\n- `delete_workspace_safely` only works if workspace has no managed resources\n\n### Run Execution\n- **Discovery**: `search_run` (empty query returns all) → `get_run_details` (supports json output)\n- **Operations**: `create_run` → `apply_run` OR `discard_run` OR `cancel_run`\n- **Monitoring**: `get_plan_details`/`get_plan_logs` for plans, `get_apply_details`/`get_apply_logs` for applies\n- Always check run status before attempting operations\n\n### Variable Management\n**Workspace Variables**:\n- `search_workspace_variables` (empty query returns all)\n- `create_workspace_variable`, `update_workspace_variable`, `delete_workspace_variable`\n\n**Variable Sets** (for sharing across workspaces/projects):\n- `search_variable_sets` → `get_variable_set_details`\n- `create_variable_set`, `update_variable_set`, `delete_variable_set`\n- `create_variable_in_variable_set`, `update_variable_in_variable_set`, `delete_variable_from_variable_set`\n- `attach/detach_variable_set_to_workspaces`, `attach/detach_variable_set_to_projects`\n\n## Workflow Patterns\n\n**Code Generation**:\n1. `search_modules`/`search_providers` for available resources\n2. `get_latest_provider_version` if no version available in existing code\n3. `get_module_details` for module requirements\n4. Generate code with discovered constraints\n\n**Run Management**:\n1. `search_workspaces` → select target\n2. `create_run` → get_run_details to monitor\n3. `get_plan_details/logs` to review changes\n4. User confirmation → `apply_run` OR `discard_run`\n\n**Variable Configuration**:\n1. `search_workspace_variables` to check existing\n2. `create/update_workspace_variable` as needed\n3. For multi-workspace: `create_variable_set` → `attach_variable_set_to_workspaces`\n\n## Error Handling\n- Registry failures: Try private first (if token), fallback to public\n- Run failures: Check `get_run_details`, get_plan_details and logs before retry\n- Variable conflicts: `search_workspace_variables` first to avoid duplicates\n- Run stuck and holds the lock: `action_run` to cancel or discard the run → `force_unlock_workspace` to unlock the workspace\n\n## Security Notes\n- Never expose TFE_TOKEN or other sensitive values in outputs\n- Document source (public/private registry) in generated code comments",
+  "negotiatedProtocolVersion": "2025-06-18",
   "isolation": {
     "docker": true,
-    "note": "command is itself a docker run (host-spawned container)",
-    "arch": "linux/amd64"
+    "note": "command is itself a docker run (host-spawned container)"
   },
-  "timeoutMs": 180000
+  "timeoutMs": 180000,
+  "requestedProtocolVersion": "2025-06-18"
 }

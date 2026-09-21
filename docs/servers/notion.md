@@ -2,13 +2,15 @@
 
 **17,500 tokens** across 24 tools — *heavy* (15–30K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
 
+An Anthropic request carries 17,163 of those tokens as tool definitions, and Claude counts those at **33,560**.
+
 | | |
 |---|---|
 | server (self-reported) | Notion API v1.0.0 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y @notionhq/notion-mcp-server` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · architecture not on record · network enabled for package fetch; clean FS, no host credent |
 | env vars supplied | NOTION_TOKEN |
 | canonical SHA-256 | `f9544e7c84986529d5bc4a1c9357bbbb9c2f458133904075319f8fec7d716da9` |
 | category | vendor-official |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | API-update-page-markdown | 1,282 | 7.3% | 62 | 1,189 |
 | API-post-search | 1,097 | 6.3% | 14 | 1,056 |
@@ -47,7 +49,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|

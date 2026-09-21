@@ -2,13 +2,15 @@
 
 **540 tokens** across 7 tools — *lean* (< 1K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
 
+An Anthropic request carries 540 of those tokens as tool definitions, and Claude counts those at **1,267**.
+
 | | |
 |---|---|
 | server (self-reported) | example-servers/puppeteer v0.1.0 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y @modelcontextprotocol/server-puppeteer` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · architecture not on record · network enabled for package fetch; clean FS, no host credent |
 | env vars supplied | none |
 | canonical SHA-256 | `d9e46f0316917c1d140ffeebceefd4d31c16188780ac278baf347ff536015dd0` |
 | category | official-reference |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | puppeteer_screenshot | 142 | 26.3% | 11 | 117 |
 | puppeteer_navigate | 129 | 23.9% | 4 | 111 |
@@ -30,7 +32,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|

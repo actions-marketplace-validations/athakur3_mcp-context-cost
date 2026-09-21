@@ -1,6 +1,8 @@
 # filesystem — context cost
 
-**2,823 tokens** across 14 tools — *light* (1–5K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**2,823 tokens** across 14 tools — *light* (1–5K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
+
+An Anthropic request carries 1,665 of those tokens as tool definitions, and Claude counts those at **3,115**.
 
 | | |
 |---|---|
@@ -8,7 +10,7 @@
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y @modelcontextprotocol/server-filesystem /tmp` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | none |
 | canonical SHA-256 | `245b04832111268c3fcc72543af89fb2f8c109d8306c1b5b8c49dc45977e41e1` |
 | category | official-reference |
@@ -16,28 +18,28 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
-|---|---:|---:|---:|---:|
-| read_media_file | 290 | 10.3% | 47 | 34 |
-| read_text_file | 256 | 9.1% | 97 | 78 |
-| edit_file | 245 | 8.7% | 35 | 118 |
-| search_files | 218 | 7.7% | 79 | 60 |
-| read_multiple_files | 210 | 7.4% | 58 | 71 |
-| directory_tree | 202 | 7.2% | 72 | 51 |
-| list_directory_with_sizes | 201 | 7.1% | 56 | 62 |
-| move_file | 192 | 6.8% | 57 | 43 |
-| read_file | 179 | 6.3% | 19 | 78 |
-| create_directory | 177 | 6.3% | 51 | 34 |
-| write_file | 174 | 6.2% | 39 | 43 |
-| list_directory | 166 | 5.9% | 53 | 34 |
-| get_file_info | 162 | 5.7% | 47 | 34 |
-| list_allowed_directories | 149 | 5.3% | 41 | 24 |
+| tool | tokens | share | description | input schema | output schema |
+|---|---:|---:|---:|---:|---:|
+| read_media_file | 290 | 10.3% | 47 | 34 | 167 |
+| read_text_file | 256 | 9.1% | 97 | 78 | 39 |
+| edit_file | 245 | 8.7% | 35 | 118 | 39 |
+| search_files | 218 | 7.7% | 79 | 60 | 39 |
+| read_multiple_files | 210 | 7.4% | 58 | 71 | 39 |
+| directory_tree | 202 | 7.2% | 72 | 51 | 39 |
+| list_directory_with_sizes | 201 | 7.1% | 56 | 62 | 39 |
+| move_file | 192 | 6.8% | 57 | 43 | 39 |
+| read_file | 179 | 6.3% | 19 | 78 | 39 |
+| create_directory | 177 | 6.3% | 51 | 34 | 39 |
+| write_file | 174 | 6.2% | 39 | 43 | 39 |
+| list_directory | 166 | 5.9% | 53 | 34 | 39 |
+| get_file_info | 162 | 5.7% | 47 | 34 | 39 |
+| list_allowed_directories | 149 | 5.3% | 41 | 24 | 39 |
 
 Each tool is tokenized on its own, so the parts do not sum exactly to the whole: the array adds its own brackets and commas, and the tokenizer merges tokens across object boundaries. The badge number is always the count of the whole array, never a sum of parts.
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -54,6 +56,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-16 | 2,823 | 14 | not recorded | not recorded | — |
 | 2026-08-18 | 2,823 | 14 | not recorded | docker | no change |
 | 2026-09-04 | 2,823 | 14 | 0.2.0 | docker | no change |
+| 2026-09-16 | 2,823 | 14 | 0.2.0 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

@@ -1,9 +1,18 @@
 {
   "name": "mcp-context-cost",
-  "version": "0.15.0",
+  "version": "0.20.0",
   "description": "Measure what your MCP servers cost in context tokens — audit your own config, or badge the server you publish",
   "type": "module",
   "license": "MIT",
+  "main": "./dist/core/index.js",
+  "types": "./dist/core/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/core/index.d.ts",
+      "default": "./dist/core/index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/athakur3/mcp-context-cost.git"
@@ -36,12 +45,13 @@
     "prepublishOnly": "npm run build && npm test && npm run typecheck",
     "test": "vitest run",
     "test:badge": "./upstream/tests/badge-test.sh",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.tools.json",
-    "adoption": "tsx tools/measure-adoption.ts",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.tools.json && tsc -p tsconfig.test.json",
+    "lint": "oxlint src tools test spec vitest.config.ts",
+    "format": "prettier --write \"{src,tools,test,spec}/**/*.ts\" vitest.config.ts",
+    "format:check": "prettier --check \"{src,tools,test,spec}/**/*.ts\" vitest.config.ts",
     "scan-registry": "tsx tools/scan-registry.ts",
     "cross-check": "tsx src/sweep/cross-check.ts",
     "divergence": "tsx tools/measure-divergence.ts",
-    "session-start": "tsx src/sweep/session-start.ts",
     "sweep": "tsx src/sweep/run.ts",
     "sweep:all": "tsx src/sweep/sweep-all.ts",
     "verify": "tsx src/cli.ts verify",
@@ -57,10 +67,12 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@anthropic-ai/sdk": "^0.117.1",
+    "@anthropic-ai/sdk": "^0.124.0",
     "@types/node": "^26.2.0",
+    "oxlint": "^1.82.0",
+    "prettier": "^3.9.6",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
+    "vitest": "^5.0.0"
   }
 }

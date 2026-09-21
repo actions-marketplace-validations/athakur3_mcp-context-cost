@@ -11,30 +11,38 @@
  * deriving it from the date — for reproducing a given week, not for scheduled
  * use.
  */
-import { readFileSync } from 'node:fs';
-import { parse } from 'yaml';
 import { measureServer } from './run.js';
 import { DockerHarnessFault } from './docker.js';
 import { writeLeaderboard, type ServerEntry } from './report.js';
 import { appendHistory } from './history.js';
 import { appendToolVectors, writeRegressions } from './regressions.js';
-import { FAULT_RATIO, MIN_REGRESSIONS, snapshot, verdict, restore } from './harness-guard.js';
+import { MIN_REGRESSIONS, snapshot, verdict, restore, type Outcome } from './harness-guard.js';
 import { selectShard, shardIndexForDate } from './shard.js';
-import type { MeasurementStatus } from '../core/types.js';
+import { loadServersDoc } from './servers-schema.js';
+import { flagValue, knownFlagNames, unknownFlags, valuelessFlags } from '../flags.js';
 
-function arg(name: string): string | undefined {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? process.argv[i + 1] : undefined;
+const SPEC = {
+  value: ['only', 'concurrency', 'default-timeout', 'shards', 'shard-index'],
+  boolean: ['docker'],
+};
+const argv = process.argv.slice(2);
+const bad = [...unknownFlags(argv, SPEC), ...valuelessFlags(argv, SPEC)];
+if (bad.length) {
+  console.error(`unrecognised or valueless: ${bad.join(', ')}`);
+  process.exit(2);
 }
+const known = knownFlagNames(SPEC);
 
-const doc = parse(readFileSync('servers.yaml', 'utf8')) as { servers: ServerEntry[] };
-const only = arg('only')?.split(',');
-const docker = process.argv.includes('--docker');
-const concurrency = Number(arg('concurrency') ?? 3);
-const defaultTimeout = Number(arg('default-timeout') ?? 60);
+const doc = loadServersDoc() as { servers: ServerEntry[] };
+const only = flagValue(argv, 'only', known)?.split(',');
+const docker = argv.includes('--docker');
+const concurrency = Number(flagValue(argv, 'concurrency', known) ?? 3);
+const defaultTimeout = Number(flagValue(argv, 'default-timeout', known) ?? 60);
 
-const shards = arg('shards') === undefined ? undefined : Number(arg('shards'));
-const shardIndexArg = arg('shard-index') === undefined ? undefined : Number(arg('shard-index'));
+const shardsRaw = flagValue(argv, 'shards', known);
+const shards = shardsRaw === undefined ? undefined : Number(shardsRaw);
+const shardIndexRaw = flagValue(argv, 'shard-index', known);
+const shardIndexArg = shardIndexRaw === undefined ? undefined : Number(shardIndexRaw);
 
 if (shards !== undefined && only) {
   // Both narrow the set, but the sharded one is meant to be a *complete*
@@ -91,7 +99,7 @@ const prior = snapshot(entries.map((e) => e.name));
 
 const queue = [...entries];
 const summary: Record<string, string> = {};
-const statuses = new Map<string, MeasurementStatus>();
+const outcomes = new Map<string, Outcome>();
 // Servers docker itself failed to run — never a measurement (measureServer
 // throws before persisting), so each one's previous record simply stands.
 const dockerFaults = new Map<string, string>();
@@ -119,7 +127,7 @@ async function worker() {
       continue;
     }
     const secs = ((Date.now() - started) / 1000).toFixed(0);
-    statuses.set(e.name, m.status);
+    outcomes.set(e.name, { status: m.status, toolCount: m.toolCount });
     summary[e.name] =
       m.status === 'measured' || m.status === 'dynamic'
         ? `${m.totalTokens} tokens / ${m.toolCount} tools (${m.status}, ${secs}s)`
@@ -139,10 +147,12 @@ await Promise.all(Array.from({ length: Math.max(1, concurrency) }, () => worker(
 // neither threshold, and the sweep publishes with 10 of 14 servers producing no
 // number and four good records overwritten with failures. A server that could
 // have produced a number and didn't is one fact, however it failed.
-const v = verdict(prior, statuses, dockerFaults.size);
+const v = verdict(prior, outcomes, dockerFaults.size);
 console.log(`harness check: ${v.reason}`);
 if (dockerFaults.size > 0 && !v.fault) {
-  console.warn(`  (${dockerFaults.size} docker fault(s) counted toward that check; those servers were not measured)`);
+  console.warn(
+    `  (${dockerFaults.size} docker fault(s) counted toward that check; those servers were not measured)`,
+  );
 }
 if (v.fault) {
   if (dockerFaults.size) {
@@ -179,4 +189,6 @@ if (dockerFaults.size > 0) {
       `previous records untouched. The next cycle re-attempts ${dockerFaults.size === 1 ? 'it' : 'them'}.`,
   );
 }
-console.log(`done: ${measured}/${entries.length} measured; leaderboard + history (${h.rows} rows) regenerated`);
+console.log(
+  `done: ${measured}/${entries.length} measured; leaderboard + history (${h.rows} rows) regenerated`,
+);

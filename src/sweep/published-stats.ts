@@ -27,13 +27,38 @@
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { DEFAULT_CONTEXT_WINDOW } from '../audit/audit.js';
 import { BAND_PRECISION, wireToClientRatio } from '../audit/deferral.js';
-import { fieldSelectionShare, isCurrent } from '../core/divergence.js';
+import { countTokens } from '../core/canonical.js';
+import { fieldSelectionShare, isCurrent, mappedTokens } from '../core/divergence.js';
 import { sessionStartLoad } from '../core/session-start.js';
 import { isGood } from './harness-guard.js';
-import { loadDivergence, loadRows, loadSessionStartRun, type Row, type ServerEntry } from './report.js';
+import { loadDivergence, loadRows, type Row, type ServerEntry } from './report.js';
 import { collectChanges } from './regressions.js';
+
+/**
+ * One server as three numbers that are all true and mean different things.
+ *
+ * **A triple always has three slots.** Each leg is gated by what that leg
+ * depends on and by nothing else. `wire` and `mapped` depend only on the
+ * capture on disk, so they exist for every measured server and cannot go
+ * stale. `claude` additionally depends on an Anthropic API call, so it is the
+ * only leg that can ever be absent: it prints `—` when the divergence row is
+ * missing, stale against the capture, or carries an error. A missing leg
+ * prints `—` — never a blank, never a zero, never the wire figure repeated,
+ * and never a suppressed neighbour, which is the 0.11.2 staleness defect run
+ * backwards. **Prose that cannot be written with an em-dash in one of its
+ * slots is not written**, which is why no surface states the heaviest server's
+ * share of a context window: a share can only come honestly from the leg that
+ * can be null, and a `values()` that throws turns regen red on a schedule.
+ */
+export interface Triple {
+  /** o200k over the canonical `tools/list` bytes. The badge, and every ranking. */
+  wire: number;
+  /** o200k over the `name`/`description`/`input_schema` projection a request carries. */
+  mapped: number;
+  /** Anthropic's own count of that projection; null when stale, errored or absent. */
+  claude: number | null;
+}
 
 export interface PublishedStats {
   candidateTotal: number;
@@ -43,20 +68,31 @@ export interface PublishedStats {
   min: { name: string; tokens: number };
   /** max/min, floored to two significant digits — a span claim must not overstate. */
   spanTimes: number;
-  /** The heaviest server's share of the default context window, rounded %. */
-  maxContextSharePct: number;
   /** The servers README's sample table names, with their current numbers. */
   sample: Record<string, { tokens: number; tools: number }>;
+  /** Every server any page states a number for, as all three of its numbers. */
+  triple: Record<string, Triple>;
   claude: {
     runSize: number;
     /** Rows the leaderboard prints a claude number for: measured AND capture-current. */
     currentCount: number;
     heaviestClaudeName: string | null;
     /** `claudeTokens` is null when the published row no longer matches the capture on disk. */
-    github: { badgeTokens: number; claudeTokens: number | null };
+    github: {
+      badgeTokens: number;
+      claudeTokens: number | null;
+      /**
+       * The single heaviest field in github's capture that an Anthropic tools
+       * array has nowhere to put, and its share of the capture. Derived rather
+       * than described — see `heaviestDroppedField` below for the hand-written
+       * sentence that made deriving it necessary.
+       */
+      dropField: string;
+      dropSharePct: number;
+    };
     notion: { badgeTokens: number; claudeTokens: number | null };
     /** The current row showing the largest field-selection effect, and its two counts. */
-    widest: { server: string; full: number; mapped: number };
+    widest: { server: string; full: number; mapped: number; claude: number };
     /** Field-selection share across the run's *current* rows, as fractions of the payload. */
     shareMin: number;
     shareMax: number;
@@ -65,13 +101,21 @@ export interface PublishedStats {
     ratioMax: number;
     /** How many rows produced the band — see where it is set. */
     ratioServers: number;
+    /**
+     * The run's own upper bound on the fixed framing every `claudeDelta`
+     * carries. Live data: it is remeasured whenever the divergence run reruns,
+     * and `server-pages.ts` already renders the fresh value onto every server
+     * page — so METHODOLOGY stating it by hand meant the two drifted apart.
+     */
+    probeDelta: number;
   };
   /**
-   * The published tool-shape baseline, which README quotes twice — once in
-   * prose and once inside the `--suggest` sample output. Both were hand-written
-   * and `STATIC_COUNTS` excused them as regen-maintained, which was not true of
-   * either: the file said 1,430 tools across 87 servers while the page said
-   * 1,150 across 81, and every test passed.
+   * The published tool-shape baseline, quoted in README's `--suggest` sample
+   * output. It was hand-written once, and `STATIC_COUNTS` excused it as
+   * regen-maintained when it was not: the file said 1,430 tools across 87
+   * servers while the page said 1,150 across 81, and every test passed. The
+   * prose copy beside it is gone — the page links the method instead of
+   * restating its threshold — so this is the one place the baseline is quoted.
    */
   toolShape: { toolCount: number; serverCount: number; generatedAt: string };
   deferralCostlierCount: number;
@@ -91,6 +135,43 @@ export const SAMPLE_SERVERS = [
   'markitdown',
 ] as const;
 
+/**
+ * The three fields an Anthropic tool definition carries. Everything else a
+ * server ships in `tools/list` is dropped before the request — see
+ * docs/METHODOLOGY.md#claude-divergence.
+ */
+const ANTHROPIC_TOOL_FIELDS = new Set(['name', 'description', 'inputSchema']);
+
+/**
+ * The heaviest field in a capture that an Anthropic request has nowhere to put,
+ * and what share of the capture it is.
+ *
+ * This exists because the README sentence it feeds was hand-written and wrong.
+ * It said most of github's capture was `annotations`/`outputSchema` metadata;
+ * github ships no `outputSchema` at all and 1.7% of annotations, and the weight
+ * being dropped was `icons` at 78%. The claim was plausible, unmaintained, and
+ * describing a different server's shape — so it is derived now, and it moves
+ * when the capture does.
+ *
+ * Ties break on the field name so the sentence does not flip between two
+ * equal-weight fields from one regeneration to the next.
+ */
+export function heaviestDroppedField(
+  capture: unknown[] | null,
+  totalTokens: number,
+): { dropField: string; dropSharePct: number } {
+  const tally = new Map<string, number>();
+  for (const tool of capture ?? []) {
+    for (const [k, v] of Object.entries((tool ?? {}) as Record<string, unknown>)) {
+      if (ANTHROPIC_TOOL_FIELDS.has(k)) continue;
+      tally.set(k, (tally.get(k) ?? 0) + countTokens(JSON.stringify(v)));
+    }
+  }
+  const top = [...tally].toSorted((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+  if (!top || totalTokens <= 0) return { dropField: 'none', dropSharePct: 0 };
+  return { dropField: top[0], dropSharePct: Math.round((100 * top[1]) / totalTokens) };
+}
+
 export function floorToTwoSignificant(n: number): number {
   const whole = Math.floor(n);
   if (whole < 100) return whole;
@@ -98,21 +179,28 @@ export function floorToTwoSignificant(n: number): number {
   return Math.floor(whole / magnitude) * magnitude;
 }
 
-export function computePublishedStats(entries: ServerEntry[], root = process.cwd()): PublishedStats {
+export function computePublishedStats(
+  entries: ServerEntry[],
+  root = process.cwd(),
+): PublishedStats {
   const rows = loadRows(entries, root);
   const div = loadDivergence(root);
-  const ss = loadSessionStartRun(root);
 
   const measured = rows
     .filter((r): r is Row & { m: NonNullable<Row['m']> } => r.m !== null && isGood(r.m.status))
     .filter((r) => typeof r.m.totalTokens === 'number')
-    .sort((a, b) => b.m.totalTokens! - a.m.totalTokens!);
-  if (measured.length < 2) throw new Error('fewer than two measured servers on disk — published stats cannot be computed');
+    .toSorted((a, b) => b.m.totalTokens! - a.m.totalTokens!);
+  if (measured.length < 2)
+    throw new Error('fewer than two measured servers on disk — published stats cannot be computed');
 
-  const asPair = (r: (typeof measured)[number]) => ({ name: r.entry.name, tokens: r.m.totalTokens! });
-  const max = asPair(measured[0]);
-  const min = asPair(measured[measured.length - 1]);
-  if (min.tokens <= 0) throw new Error(`cheapest measured server (${min.name}) has no positive token count`);
+  const asPair = (r: (typeof measured)[number]) => ({
+    name: r.entry.name,
+    tokens: r.m.totalTokens!,
+  });
+  const max = asPair(nth(measured, 0, 'measured'));
+  const min = asPair(nth(measured, measured.length - 1, 'measured'));
+  if (min.tokens <= 0)
+    throw new Error(`cheapest measured server (${min.name}) has no positive token count`);
 
   const sample: PublishedStats['sample'] = {};
   for (const name of SAMPLE_SERVERS) {
@@ -126,27 +214,61 @@ export function computePublishedStats(entries: ServerEntry[], root = process.cwd
   if (!div) throw new Error('results/divergence.json is missing — README states its numbers');
 
   /**
-   * A divergence row only where it still describes the capture on disk.
+   * The three numbers for one server, each leg gated by what it depends on.
    *
-   * The staleness gate is the whole discipline of this column, and skipping it
-   * here is how README came to print two different costs for github on one
-   * page: 54,422 from a row computed against bytes that no longer existed,
-   * beside 54,622 from the measurement. `withClaude` below already applied
-   * `isCurrent` to the very same run — the rule guarded one number and not its
-   * neighbour.
+   * `wire` comes from the measurement, never from a divergence row's copy of
+   * it: skipping that is how README came to print two different costs for
+   * github on one page — 54,422 from a row computed against bytes that no
+   * longer existed, beside 54,622 from the measurement.
+   *
+   * `mapped` is recomputed here rather than read from the row's `o200kMapped`
+   * for the same reason one layer along. The divergence run writes that field
+   * by calling this same function on these same bytes, so recomputing costs
+   * nothing and cannot disagree with the capture — and it means the middle leg
+   * exists for a server the run has never reached, and needs no API key.
+   *
+   * `claude` is gated on `isCurrent`, never on the shape of `claudeDelta`.
+   * `gitlab`'s row carries a literal `0` beside an `error`, so a test on the
+   * number's type would publish "0 tokens on Claude" about a server nobody has
+   * successfully counted.
    */
-  const currentDivRow = (name: string) => {
-    const d = div.servers[name];
-    if (!d) throw new Error(`README's Claude table names ${name}, which is not in the divergence run`);
-    const onDisk = rows.find((r) => r.entry.name === name)?.m?.canonicalSha256 ?? null;
-    return isCurrent(d, onDisk) ? d : null;
-  };
-  /** The badge number comes from the measurement, never from a divergence row's copy of it. */
-  const badgeTokensOf = (name: string) => {
+  const tripleOf = (name: string): Triple => {
     const r = measured.find((x) => x.entry.name === name);
-    if (!r) throw new Error(`README's Claude table names ${name}, which has no current measurement`);
-    return r.m.totalTokens!;
+    if (!r) throw new Error(`a page states numbers for ${name}, which has no current measurement`);
+    if (!r.m.rawToolsCapture) {
+      throw new Error(
+        `${name} is measured but holds no capture, so its mapped count cannot be derived`,
+      );
+    }
+    const row = div.servers[name];
+    return {
+      wire: r.m.totalTokens!,
+      mapped: mappedTokens(r.m.rawToolsCapture),
+      claude: isCurrent(row, r.m.canonicalSha256 ?? null) ? row.claudeDelta : null,
+    };
   };
+
+  /**
+   * README's Claude table names these two servers in fixed words. A name the
+   * divergence run has never seen is an editorial mistake in the page rather
+   * than missing data, so it throws — unlike every other triple, whose `claude`
+   * leg is allowed to be absent and prints an em-dash.
+   */
+  for (const name of ['github', 'notion'] as const) {
+    if (!div.servers[name]) {
+      throw new Error(`README's Claude table names ${name}, which is not in the divergence run`);
+    }
+  }
+
+  const triple: PublishedStats['triple'] = {};
+  for (const name of new Set<string>([
+    max.name,
+    nth(measured, 1, 'measured').entry.name,
+    min.name,
+    ...SAMPLE_SERVERS,
+  ])) {
+    triple[name] = tripleOf(name);
+  }
 
   // Ranges are stated over the rows that are still current, for the same
   // reason: a range whose endpoint comes from a superseded capture describes a
@@ -164,20 +286,26 @@ export function computePublishedStats(entries: ServerEntry[], root = process.cwd
   // by a delta that still had the fixed tool overhead in it.
   const band = wireToClientRatio(div);
   if (shares.length === 0 || band.servers === 0) {
-    throw new Error('no current divergence row — METHODOLOGY states ranges over them; run `npm run divergence`');
+    throw new Error(
+      'no current divergence row — METHODOLOGY states ranges over them; run `npm run divergence`',
+    );
   }
   // The exemplar METHODOLOGY names for the field-selection effect is whichever
   // current row shows it most, rather than a server hardcoded into the prose.
   const widest = currentRows
     .filter(([, r]) => (fieldSelectionShare(r) ?? -1) >= 0)
-    .sort((a, b) => (fieldSelectionShare(b[1]) ?? 0) - (fieldSelectionShare(a[1]) ?? 0))[0]!;
-  const withClaude = measured.filter((r) => isCurrent(div.servers[r.entry.name], r.m.canonicalSha256));
-  const heaviest = [...withClaude].sort(
-    (a, b) => div.servers[b.entry.name].claudeDelta - div.servers[a.entry.name].claudeDelta,
-  )[0];
+    .toSorted((a, b) => (fieldSelectionShare(b[1]) ?? 0) - (fieldSelectionShare(a[1]) ?? 0))[0]!;
+  const withClaude = measured.filter((r) =>
+    isCurrent(div.servers[r.entry.name], r.m.canonicalSha256),
+  );
+  // Every row here passed `isCurrent`, so its divergence row exists; the lookup
+  // is named rather than asserted so a set that changed under us says which server.
+  const claudeDeltaOf = (r: (typeof withClaude)[number]) =>
+    entryOf(div.servers, r.entry.name, 'divergence run').claudeDelta;
+  const heaviest = withClaude.toSorted((a, b) => claudeDeltaOf(b) - claudeDeltaOf(a))[0];
 
   const costlier = measured.filter((r) => {
-    const load = sessionStartLoad(r.m, ss?.servers[r.entry.name]);
+    const load = sessionStartLoad(r.m);
     return load !== null && load.totalTokens >= r.m.totalTokens!;
   });
 
@@ -190,8 +318,13 @@ export function computePublishedStats(entries: ServerEntry[], root = process.cwd
 
   const shape = (() => {
     const p = join(root, 'results', 'tool-shape.json');
-    if (!existsSync(p)) throw new Error('results/tool-shape.json is missing — README states its numbers');
-    const j = JSON.parse(readFileSync(p, 'utf8')) as { toolCount: number; serverCount: number; generatedAt: string };
+    if (!existsSync(p))
+      throw new Error('results/tool-shape.json is missing — README states its numbers');
+    const j = JSON.parse(readFileSync(p, 'utf8')) as {
+      toolCount: number;
+      serverCount: number;
+      generatedAt: string;
+    };
     return { toolCount: j.toolCount, serverCount: j.serverCount, generatedAt: j.generatedAt };
   })();
 
@@ -200,18 +333,32 @@ export function computePublishedStats(entries: ServerEntry[], root = process.cwd
     candidateTotal: rows.length,
     measuredCount: measured.length,
     max,
-    second: asPair(measured[1]),
+    second: asPair(nth(measured, 1, 'measured')),
     min,
     spanTimes: floorToTwoSignificant(max.tokens / min.tokens),
-    maxContextSharePct: Math.round((max.tokens / DEFAULT_CONTEXT_WINDOW) * 100),
     sample,
+    triple,
     claude: {
       runSize: Object.keys(div.servers).length,
       currentCount: withClaude.length,
       heaviestClaudeName: heaviest?.entry.name ?? null,
-      github: { badgeTokens: badgeTokensOf('github'), claudeTokens: currentDivRow('github')?.claudeDelta ?? null },
-      notion: { badgeTokens: badgeTokensOf('notion'), claudeTokens: currentDivRow('notion')?.claudeDelta ?? null },
-      widest: { server: widest[0], full: widest[1].o200kFull, mapped: widest[1].o200kMapped },
+      github: {
+        badgeTokens: entryOf(triple, 'github', 'triple').wire,
+        claudeTokens: entryOf(triple, 'github', 'triple').claude,
+        ...heaviestDroppedField(githubRow.m.rawToolsCapture, githubRow.m.totalTokens),
+      },
+      notion: {
+        badgeTokens: entryOf(triple, 'notion', 'triple').wire,
+        claudeTokens: entryOf(triple, 'notion', 'triple').claude,
+      },
+      // `claude` is not nullable here, unlike a triple's: `widest` is picked
+      // out of `currentRows`, and `isCurrent` already required a numeric delta.
+      widest: {
+        server: widest[0],
+        full: widest[1].o200kFull,
+        mapped: widest[1].o200kMapped,
+        claude: widest[1].claudeDelta,
+      },
       shareMin: Math.min(...shares),
       shareMax: Math.max(...shares),
       ratioMin: band.low,
@@ -221,6 +368,7 @@ export function computePublishedStats(entries: ServerEntry[], root = process.cwd
       // zero delta. "Across {runSize} servers" states the band was measured over
       // one more server than measured it.
       ratioServers: band.servers,
+      probeDelta: div.probeDelta,
     },
     deferralCostlierCount: costlier.length,
     movement: { grew: movement.grew, shrank: movement.shrank },
@@ -232,6 +380,30 @@ export function computePublishedStats(entries: ServerEntry[], root = process.cwd
 }
 
 export type PageFile = 'README.md' | 'docs/index.md' | 'docs/METHODOLOGY.md';
+/**
+ * A row at a position the guards above have already established.
+ *
+ * `noUncheckedIndexedAccess` cannot see a length check, and the honest answer to
+ * "the measured set shrank between the check and the read" is to say so rather
+ * than to assert past it: every caller here is computing a number that is about
+ * to be spliced into a published page.
+ */
+function nth<T>(rows: readonly T[], i: number, what: string): T {
+  const row = rows[i];
+  if (row === undefined) throw new Error(`${what}: no row at position ${i} of ${rows.length}`);
+  return row;
+}
+
+/** A named entry a claim rests on, or a refusal that names the server it wanted. */
+function entryOf<T>(map: Record<string, T>, name: string, what: string): T {
+  const entry = map[name];
+  if (entry === undefined)
+    throw new Error(
+      `${what}: nothing measured for '${name}' — a claim cannot state a server that is not there`,
+    );
+  return entry;
+}
+
 export const PAGE_FILES: PageFile[] = ['README.md', 'docs/index.md', 'docs/METHODOLOGY.md'];
 
 /**
@@ -255,75 +427,102 @@ export const PAGE_CLAIMS: Claim[] = [
   {
     file: 'README.md',
     id: 'span',
-    template: 'across the {n} servers measured, cost spans **{n}×**, from `{w}` at {n} tokens to `{w}` at {n}.',
-    values: (s) => [fmt(s.measuredCount), fmt(s.spanTimes), s.min.name, fmt(s.min.tokens), s.max.name, fmt(s.max.tokens)],
-  },
-  {
-    file: 'README.md',
-    id: 'sample:github',
-    template: '| github (official) | **{n} tokens** | {n} |',
-    values: (s) => [fmt(s.sample.github.tokens), fmt(s.sample.github.tools)],
-  },
-  {
-    file: 'README.md',
-    id: 'sample:xcodebuildmcp',
-    template: '| xcodebuildmcp | {n} | {n} |',
-    values: (s) => [fmt(s.sample.xcodebuildmcp.tokens), fmt(s.sample.xcodebuildmcp.tools)],
-  },
-  {
-    file: 'README.md',
-    id: 'sample:brave-search',
-    template: '| brave-search | {n} | {n} |',
-    values: (s) => [fmt(s.sample['brave-search'].tokens), fmt(s.sample['brave-search'].tools)],
-  },
-  {
-    file: 'README.md',
-    id: 'sample:notion',
-    template: '| notion | {n} | {n} |',
-    values: (s) => [fmt(s.sample.notion.tokens), fmt(s.sample.notion.tools)],
-  },
-  {
-    file: 'README.md',
-    id: 'sample:playwright',
-    template: '| playwright *(4.8M installs/week)* | {n} | {n} |',
-    values: (s) => [fmt(s.sample.playwright.tokens), fmt(s.sample.playwright.tools)],
-  },
-  {
-    file: 'README.md',
-    id: 'sample:filesystem',
-    template: '| filesystem (reference) | {n} | {n} |',
-    values: (s) => [fmt(s.sample.filesystem.tokens), fmt(s.sample.filesystem.tools)],
-  },
-  {
-    file: 'README.md',
-    id: 'sample:markitdown',
-    template: '| markitdown | {n} | {n} |',
-    values: (s) => [fmt(s.sample.markitdown.tokens), fmt(s.sample.markitdown.tools)],
-  },
-  {
-    file: 'README.md',
-    id: 'measured-of-candidates',
-    template: '*({n} of {n} popular servers measured, each row dated by its own most recent sweep — full table in',
-    values: (s) => [fmt(s.measuredCount), fmt(s.candidateTotal)],
-  },
-  {
-    file: 'README.md',
-    id: 'divergence-ratio-range',
-    // README's own copy of the range METHODOLOGY maintains. Found by the
-    // page-number guard: three numbers written by hand beside the two
-    // sentences regen already kept true.
-    template: 'measured at {f}×–{f}× across {n} servers)',
+    template:
+      'across the {n} servers measured, cost spans **{n}×** on the wire, from `{w}` at {n} tokens to `{w}` at {n} — of which a request carries {n}, and Claude counts those at {q}.',
     values: (s) => [
-      s.claude.ratioMin.toFixed(BAND_PRECISION),
-      s.claude.ratioMax.toFixed(BAND_PRECISION),
-      fmt(s.claude.ratioServers),
+      fmt(s.measuredCount),
+      fmt(s.spanTimes),
+      s.min.name,
+      fmt(s.min.tokens),
+      s.max.name,
+      fmt(s.max.tokens),
+      fmt(entryOf(s.triple, s.max.name, 'triple').mapped),
+      q(entryOf(s.triple, s.max.name, 'triple').claude),
     ],
   },
   {
     file: 'README.md',
-    id: 'tool-shape:prose',
-    template: 'only descriptions at or above the 90th percentile of the {n} measured tools:',
-    values: (s) => [fmt(s.toolShape.toolCount)],
+    id: 'sample:github',
+    template: '| github (official) | **{n} tokens** | {n} | {q} | {n} |',
+    values: (s) => [
+      fmt(entryOf(s.triple, 'github', 'triple').wire),
+      fmt(entryOf(s.triple, 'github', 'triple').mapped),
+      q(entryOf(s.triple, 'github', 'triple').claude),
+      fmt(entryOf(s.sample, 'github', 'sample').tools),
+    ],
+  },
+  {
+    file: 'README.md',
+    id: 'sample:xcodebuildmcp',
+    template: '| xcodebuildmcp | {n} | {n} | {q} | {n} |',
+    values: (s) => [
+      fmt(entryOf(s.triple, 'xcodebuildmcp', 'triple').wire),
+      fmt(entryOf(s.triple, 'xcodebuildmcp', 'triple').mapped),
+      q(entryOf(s.triple, 'xcodebuildmcp', 'triple').claude),
+      fmt(entryOf(s.sample, 'xcodebuildmcp', 'sample').tools),
+    ],
+  },
+  {
+    file: 'README.md',
+    id: 'sample:brave-search',
+    template: '| brave-search | {n} | {n} | {q} | {n} |',
+    values: (s) => [
+      fmt(entryOf(s.triple, 'brave-search', 'triple').wire),
+      fmt(entryOf(s.triple, 'brave-search', 'triple').mapped),
+      q(entryOf(s.triple, 'brave-search', 'triple').claude),
+      fmt(entryOf(s.sample, 'brave-search', 'sample').tools),
+    ],
+  },
+  {
+    file: 'README.md',
+    id: 'sample:notion',
+    template: '| notion | {n} | {n} | {q} | {n} |',
+    values: (s) => [
+      fmt(entryOf(s.triple, 'notion', 'triple').wire),
+      fmt(entryOf(s.triple, 'notion', 'triple').mapped),
+      q(entryOf(s.triple, 'notion', 'triple').claude),
+      fmt(entryOf(s.sample, 'notion', 'sample').tools),
+    ],
+  },
+  {
+    file: 'README.md',
+    id: 'sample:playwright',
+    template: '| playwright *(4.8M installs/week)* | {n} | {n} | {q} | {n} |',
+    values: (s) => [
+      fmt(entryOf(s.triple, 'playwright', 'triple').wire),
+      fmt(entryOf(s.triple, 'playwright', 'triple').mapped),
+      q(entryOf(s.triple, 'playwright', 'triple').claude),
+      fmt(entryOf(s.sample, 'playwright', 'sample').tools),
+    ],
+  },
+  {
+    file: 'README.md',
+    id: 'sample:filesystem',
+    template: '| filesystem (reference) | {n} | {n} | {q} | {n} |',
+    values: (s) => [
+      fmt(entryOf(s.triple, 'filesystem', 'triple').wire),
+      fmt(entryOf(s.triple, 'filesystem', 'triple').mapped),
+      q(entryOf(s.triple, 'filesystem', 'triple').claude),
+      fmt(entryOf(s.sample, 'filesystem', 'sample').tools),
+    ],
+  },
+  {
+    file: 'README.md',
+    id: 'sample:markitdown',
+    template: '| markitdown | {n} | {n} | {q} | {n} |',
+    values: (s) => [
+      fmt(entryOf(s.triple, 'markitdown', 'triple').wire),
+      fmt(entryOf(s.triple, 'markitdown', 'triple').mapped),
+      q(entryOf(s.triple, 'markitdown', 'triple').claude),
+      fmt(entryOf(s.sample, 'markitdown', 'sample').tools),
+    ],
+  },
+  {
+    file: 'README.md',
+    id: 'measured-of-candidates',
+    template:
+      '*({n} of {n} popular servers measured, each row dated by its own most recent sweep — full table in',
+    values: (s) => [fmt(s.measuredCount), fmt(s.candidateTotal)],
   },
   {
     file: 'README.md',
@@ -331,7 +530,11 @@ export const PAGE_CLAIMS: Claim[] = [
     // Inside the `--suggest` sample block. A reader compares their own output
     // against it, so a stale baseline line there is read as a current one.
     template: '(baseline {w}: {n} tools across {n} measured servers):',
-    values: (s) => [s.toolShape.generatedAt, fmt(s.toolShape.toolCount), fmt(s.toolShape.serverCount)],
+    values: (s) => [
+      s.toolShape.generatedAt,
+      fmt(s.toolShape.toolCount),
+      fmt(s.toolShape.serverCount),
+    ],
   },
   {
     file: 'README.md',
@@ -339,7 +542,8 @@ export const PAGE_CLAIMS: Claim[] = [
     // The repo map's own count of servers.yaml. It said 82 against 106 on disk:
     // written by hand when the file held 82, and ninety lines from the
     // regen-maintained count that had moved four times since.
-    template: '| `servers.yaml` | {n} curated candidates with live install metrics and provenance |',
+    template:
+      '| `servers.yaml` | {n} curated candidates with live install metrics and provenance |',
     values: (s) => [fmt(s.candidateTotal)],
   },
   {
@@ -362,14 +566,26 @@ export const PAGE_CLAIMS: Claim[] = [
   {
     file: 'README.md',
     id: 'claude-table:github',
-    template: '| github | {n} | **{q}** | most of the capture is `annotations`/`outputSchema` metadata Claude never sees |',
-    values: (s) => [fmt(s.claude.github.badgeTokens), q(s.claude.github.claudeTokens)],
+    template:
+      '| github | {n} | {n} | **{q}** | {d}% of the capture is `{w}` metadata Claude never sees |',
+    values: (s) => [
+      fmt(s.claude.github.badgeTokens),
+      fmt(entryOf(s.triple, 'github', 'triple').mapped),
+      q(s.claude.github.claudeTokens),
+      String(s.claude.github.dropSharePct),
+      s.claude.github.dropField,
+    ],
   },
   {
     file: 'README.md',
     id: 'claude-table:notion',
-    template: '| notion | {n} | **{q}** | almost no metadata to drop, so the tokenizer difference dominates |',
-    values: (s) => [fmt(s.claude.notion.badgeTokens), q(s.claude.notion.claudeTokens)],
+    template:
+      '| notion | {n} | {n} | **{q}** | almost no metadata to drop, so the tokenizer difference dominates |',
+    values: (s) => [
+      fmt(s.claude.notion.badgeTokens),
+      fmt(entryOf(s.triple, 'notion', 'triple').mapped),
+      q(s.claude.notion.claudeTokens),
+    ],
   },
   {
     file: 'README.md',
@@ -390,32 +606,61 @@ export const PAGE_CLAIMS: Claim[] = [
   {
     file: 'README.md',
     id: 'verify-transcript',
-    template: '# OK {w}: {d} tokens (o200k_base, methodology 1.0) — capture, hash, and count all agree',
+    template:
+      '# OK {w}: {d} tokens (o200k_base, methodology 1.0) — capture, hash, and count all agree',
     values: (s) => [s.verify.serverName, String(s.verify.tokens)],
   },
   {
     file: 'docs/index.md',
     id: 'index:counts',
-    template: 'We measure {n} popular MCP servers; {n} have a number today, and every failure is listed with its reason.',
+    template:
+      'We measure {n} popular MCP servers; {n} have a number today, and every failure is listed with its reason.',
     values: (s) => [fmt(s.candidateTotal), fmt(s.measuredCount)],
   },
   {
     file: 'docs/index.md',
     id: 'index:span',
+    // The share of a context window this used to end on is gone rather than
+    // rebased. It divided the wire total by 200K, and 78% of the heaviest
+    // server's wire total is base64 `icons` no request carries — so it billed a
+    // context window for bytes nobody pays for. The only leg that could state
+    // that share honestly is the one that can be null, and a `values()` that
+    // throws turns regen red on a schedule.
     template:
-      'The spread is {n}×: from `{w}` at {n} tokens to `{w}` at **{n} tokens** — {d}% of a 200K context window, before the agent takes a single action.',
-    values: (s) => [fmt(s.spanTimes), s.min.name, fmt(s.min.tokens), s.max.name, fmt(s.max.tokens), String(s.maxContextSharePct)],
+      'Ranked on the wire, the spread is {n}×: from `{w}` at {n} tokens to `{w}` at **{n} tokens**, before the agent takes a single action.',
+    values: (s) => [fmt(s.spanTimes), s.min.name, fmt(s.min.tokens), s.max.name, fmt(s.max.tokens)],
+  },
+  {
+    file: 'docs/index.md',
+    id: 'index:triple',
+    template:
+      'Of that, an Anthropic request carries {n} tokens as tool definitions, and Claude counts those at {q}.',
+    values: (s) => [
+      fmt(entryOf(s.triple, s.max.name, 'triple').mapped),
+      q(entryOf(s.triple, s.max.name, 'triple').claude),
+    ],
   },
   {
     file: 'docs/index.md',
     id: 'index:second-heaviest',
-    template: 'Second-heaviest is `{w}` at {n}.',
-    values: (s) => [s.second.name, fmt(s.second.tokens)],
+    // Three numbers rather than one, and stated flat. This server's Claude
+    // figure exceeds its own wire figure and is four times the heaviest wire
+    // server's, which is the reason a reader needs all three — but the ordering
+    // claim belongs to `divergence:heaviest-pair`, which derives both names, and
+    // asserting one here in fixed words would be a claim a sweep can falsify.
+    template: 'Second-heaviest is `{w}` at {n} on the wire, {n} carried, {q} on Claude.',
+    values: (s) => [
+      s.second.name,
+      fmt(s.second.tokens),
+      fmt(entryOf(s.triple, s.second.name, 'triple').mapped),
+      q(entryOf(s.triple, s.second.name, 'triple').claude),
+    ],
   },
   {
     file: 'docs/METHODOLOGY.md',
     id: 'divergence:share-range',
-    template: 'this removes between {f}% and **{f}%** of the payload ({w}: {n} → {n} tokens).',
+    template:
+      'this removes between {f}% and **{f}%** of the payload ({w}: {n} → {n} tokens, which Claude counts at {n}).',
     // The exemplar is whichever current row shows the effect most, not a server
     // named in the prose — a hardcoded name goes stale the week it is re-swept.
     values: (s) => [
@@ -424,6 +669,7 @@ export const PAGE_CLAIMS: Claim[] = [
       s.claude.widest.server,
       fmt(s.claude.widest.full),
       fmt(s.claude.widest.mapped),
+      fmt(s.claude.widest.claude),
     ],
   },
   {
@@ -454,11 +700,20 @@ export const PAGE_CLAIMS: Claim[] = [
   },
   {
     file: 'docs/METHODOLOGY.md',
+    id: 'divergence:probe-delta',
+    template:
+      'A single minimal tool costs {n} tokens more than no tools at all, which is an upper bound on the fixed part.',
+    values: (s) => [fmt(s.claude.probeDelta)],
+  },
+  {
+    file: 'docs/METHODOLOGY.md',
     id: 'divergence:heaviest-pair',
     template: '{w} is the heaviest server on o200k and {w} is the heaviest on Claude.',
     values: (s) => {
       if (!s.claude.heaviestClaudeName) {
-        throw new Error('no row has a current claude number — the heaviest-on-Claude sentence cannot be maintained');
+        throw new Error(
+          'no row has a current claude number — the heaviest-on-Claude sentence cannot be maintained',
+        );
       }
       return [s.max.name, s.claude.heaviestClaudeName];
     },
@@ -507,7 +762,8 @@ export const CHECK_CLAIMS: CheckClaim[] = [
   {
     file: 'README.md',
     id: 'deferring-costlier-somewhere',
-    words: 'for at least one server in the published set it costs **more** than loading the definitions would',
+    words:
+      'for at least one server in the published set it costs **more** than loading the definitions would',
     holds: (s) =>
       s.deferralCostlierCount >= 1
         ? null
@@ -515,7 +771,8 @@ export const CHECK_CLAIMS: CheckClaim[] = [
   },
 ];
 
-const escapeLiteral = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+const escapeLiteral = (s: string) =>
+  s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
 
 /** Fixed words with `\s+` for every gap (prose wraps; a claim is its words, not its layout). */
 export function compileTemplate(template: string): RegExp {
@@ -566,7 +823,7 @@ export function applyClaim(
           : `${claim.file}: claim '${claim.id}' matches ${matches.length} places — the anchor is ambiguous`,
     };
   }
-  const match = matches[0];
+  const match = matches[0]!;
   const got = match.slice(1);
   if (got.length !== want.length) {
     return {
@@ -612,12 +869,18 @@ export interface PublishedStatsResult {
 }
 
 /** Compute stats and report what regen would rewrite, without writing anything. */
-export function verifyPublishedPages(entries: ServerEntry[], root = process.cwd()): PublishedStatsResult {
+export function verifyPublishedPages(
+  entries: ServerEntry[],
+  root = process.cwd(),
+): PublishedStatsResult {
   return applyTo(entries, root, false);
 }
 
 /** Compute stats and rewrite the pages in place. Returns what changed and any refusals. */
-export function applyPublishedStats(entries: ServerEntry[], root = process.cwd()): PublishedStatsResult {
+export function applyPublishedStats(
+  entries: ServerEntry[],
+  root = process.cwd(),
+): PublishedStatsResult {
   return applyTo(entries, root, true);
 }
 

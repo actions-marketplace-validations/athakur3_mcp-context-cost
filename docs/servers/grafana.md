@@ -2,13 +2,15 @@
 
 **16,774 tokens** across 65 tools — *heavy* (15–30K). Measured 2026-09-05 under [methodology v1.0](../METHODOLOGY.html).
 
+An Anthropic request carries 15,460 of those tokens as tool definitions, and Claude counts those at **26,641**.
+
 | | |
 |---|---|
 | server (self-reported) | mcp-grafana v(devel) |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `docker run --rm -i -e GRAFANA_URL=http://localhost:3000 -e GRAFANA_SERVICE_ACCOUNT_TOKEN=dummy mcp/grafana --transport stdio` |
-| isolation | docker · command is itself a docker run (host-spawned container) |
+| isolation | docker · architecture not on record · command is itself a docker run (host-spawned container) |
 | env vars supplied | GRAFANA_URL, GRAFANA_SERVICE_ACCOUNT_TOKEN |
 | canonical SHA-256 | `f35587d4d6afaf90c68d7b861793a9e980bb6817b389fdb2391d365e7358beab` |
 | category | vendor-official |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | alerting_manage_rules | 1,368 | 8.2% | 96 | 1,238 |
 | update_dashboard | 1,006 | 6.0% | 498 | 466 |
@@ -55,7 +57,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|

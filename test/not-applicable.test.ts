@@ -2,13 +2,19 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'yaml';
-import { classifyFailure, notApplicableReason, retriesWithoutSharedCache } from '../src/sweep/run.js';
+import {
+  classifyFailure,
+  notApplicableReason,
+  retriesWithoutSharedCache,
+} from '../src/sweep/run.js';
 import { isGood } from '../src/sweep/harness-guard.js';
 import type { ServerEntry } from '../src/sweep/report.js';
 import type { Measurement } from '../src/core/types.js';
 
 const repoRoot = join(import.meta.dirname, '..');
-const doc = parse(readFileSync(join(repoRoot, 'servers.yaml'), 'utf8')) as { servers: ServerEntry[] };
+const doc = parse(readFileSync(join(repoRoot, 'servers.yaml'), 'utf8')) as {
+  servers: ServerEntry[];
+};
 
 const SAFARI_FAILURE =
   'server exited (code 1); stderr tail: npm error code EBADPLATFORM\n' +
@@ -106,15 +112,19 @@ describe('classifyFailure reads this harness’s own phrasing', () => {
   it('still reads every phrasing a measured server has actually used', () => {
     const genuine: Record<string, string> = {
       gdrive: "Credentials not found. Please run with 'auth' argument first.",
-      gmail: 'Error: OAuth keys file not found. Please place gcp-oauth.keys.json in current directory',
-      keboola: "Client error '401 Unauthorized' for url 'https://connection.keboola.com/v2/storage/tokens/verify'",
+      gmail:
+        'Error: OAuth keys file not found. Please place gcp-oauth.keys.json in current directory',
+      keboola:
+        "Client error '401 Unauthorized' for url 'https://connection.keboola.com/v2/storage/tokens/verify'",
       magic: 'Not authenticated - your API key is missing or was reset.',
       stripe: 'Invalid API key format. Expected sk_* (secret key) or rk_* (restricted key).',
       'yandex-tracker':
         'Value error, tracker_token or tracker_iam_token or tracker_sa_* must be set when oauth_enabled is False',
     };
     for (const [server, tail] of Object.entries(genuine)) {
-      expect(classifyFailure(`server exited (code 1); stderr tail: ${tail}`), server).toBe('auth-required');
+      expect(classifyFailure(`server exited (code 1); stderr tail: ${tail}`), server).toBe(
+        'auth-required',
+      );
     }
   });
 });
@@ -184,22 +194,26 @@ describe('the declarations in servers.yaml', () => {
 /**
  * `notApplicable` is a per-entry declaration, and every path that measures a
  * `servers.yaml` entry has to carry it. It reached one of three: `sweep-all`
- * passed it while `cross-check` and `session-start` iterate the same entries
+ * passed it while `cross-check` and `session-start` iterated the same entries
  * and omitted it — so either would have published a declared entry as
  * `startup-failure`, the assertion about someone else's software the bucket
  * exists to prevent. Latent only because the declared servers happen to be
- * absent from those two outputs.
+ * absent from those two outputs. `session-start` was the instructions backfill,
+ * removed on 2026-09-08 once every measured row carried its own; the rule it was
+ * fixed under still binds the paths that remain.
  *
  * Structural rather than behavioural, because the defect is a missing line at
- * a call site: a fourth sweep path added later would reintroduce it silently,
- * and no test of the three that exist today would notice.
+ * a call site: a further sweep path added later would reintroduce it silently,
+ * and no test of the ones that exist today would notice.
  */
 describe('every sweep path that measures a servers.yaml entry forwards its declaration', () => {
   const sweepDir = join(repoRoot, 'src', 'sweep');
 
   it('passes notApplicable wherever it measures an entry', () => {
     const sites: { file: string; forwards: boolean }[] = [];
-    for (const file of readdirSync(sweepDir).filter((f) => f.endsWith('.ts')).sort()) {
+    for (const file of readdirSync(sweepDir)
+      .filter((f) => f.endsWith('.ts'))
+      .toSorted()) {
       const src = readFileSync(join(sweepDir, file), 'utf8');
       // The shape that measures a servers.yaml entry: the entry's own name and
       // command, then an options object. The other three call sites in the
@@ -214,7 +228,7 @@ describe('every sweep path that measures a servers.yaml entry forwards its decla
     }
     // A rename that made the pattern stop matching would otherwise pass this
     // test by finding nothing at all.
-    expect(sites.map((s) => s.file)).toEqual(['cross-check.ts', 'pr-check.ts', 'session-start.ts', 'sweep-all.ts']);
+    expect(sites.map((s) => s.file)).toEqual(['cross-check.ts', 'pr-check.ts', 'sweep-all.ts']);
     expect(sites.filter((s) => !s.forwards).map((s) => s.file)).toEqual([]);
   });
 });

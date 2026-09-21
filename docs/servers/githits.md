@@ -2,13 +2,15 @@
 
 **12,833 tokens** across 16 tools — *moderate* (5–15K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
 
+An Anthropic request carries 12,384 of those tokens as tool definitions, and Claude counts those at **20,689**.
+
 | | |
 |---|---|
 | server (self-reported) | githits v0.12.1 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y githits mcp start` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | none |
 | canonical SHA-256 | `1de4342682e058fb6395fc1a42dbcb9fa87838dc26852ba6810e57cc388ab81e` |
 | category | community |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | search | 2,270 | 17.7% | 409 | 1,821 |
 | code_grep | 1,681 | 13.1% | 365 | 1,272 |
@@ -39,7 +41,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|

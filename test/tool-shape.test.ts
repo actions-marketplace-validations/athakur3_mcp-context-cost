@@ -7,14 +7,13 @@ import {
   buildToolShapeBaseline,
   parseToolShapeBaseline,
   percentileOf,
-  quantileTable,
   suggestFor,
-  type ToolShapeBaseline,
 } from '../src/core/tool-shape.js';
 import { measureTools, METHODOLOGY_VERSION } from '../src/core/canonical.js';
 import { buildReport, formatReport, serverKey } from '../src/audit/audit.js';
 import { loadRows, type ServerEntry } from '../src/sweep/report.js';
 import type { ToolMeasurement } from '../src/core/types.js';
+import type { ConfiguredServer } from '../src/audit/config.js';
 
 /**
  * `--suggest` gives advice with a number attached, so the failure modes worth
@@ -33,8 +32,14 @@ const tm = (name: string, tokens: number, desc: number, schema: number): ToolMea
 });
 
 /** 100 tools whose description weights are exactly 1..100 — every rank predictable. */
-const population = Array.from({ length: 100 }, (_, i) => tm(`t${i + 1}`, (i + 1) * 3, i + 1, i + 1));
-const baseline = buildToolShapeBaseline(population, { serverCount: 4, generatedAt: '2026-09-04', methodologyVersion: '1.0' });
+const population = Array.from({ length: 100 }, (_, i) =>
+  tm(`t${i + 1}`, (i + 1) * 3, i + 1, i + 1),
+);
+const baseline = buildToolShapeBaseline(population, {
+  serverCount: 4,
+  generatedAt: '2026-09-04',
+  methodologyVersion: '1.0',
+});
 
 describe('quantileTable and percentileOf', () => {
   it('is monotone with the population extremes at its ends', () => {
@@ -89,7 +94,9 @@ describe('buildToolShapeBaseline', () => {
   });
 
   it('refuses to derive a distribution from fewer than two tools', () => {
-    expect(() => buildToolShapeBaseline([population[0]], { serverCount: 1, methodologyVersion: '1.0' })).toThrow();
+    expect(() =>
+      buildToolShapeBaseline([population[0]], { serverCount: 1, methodologyVersion: '1.0' }),
+    ).toThrow();
   });
 
   it('round-trips through its published JSON form', () => {
@@ -100,7 +107,10 @@ describe('buildToolShapeBaseline', () => {
   it('rejects text that is not a baseline, including a truncated quantile table', () => {
     expect(parseToolShapeBaseline('nope')).toBeNull();
     expect(parseToolShapeBaseline('{"generatedAt":"2026-09-04","toolCount":5}')).toBeNull();
-    const short = { ...baseline, quantiles: { ...baseline.quantiles, tokens: baseline.quantiles.tokens.slice(0, 50) } };
+    const short = {
+      ...baseline,
+      quantiles: { ...baseline.quantiles, tokens: baseline.quantiles.tokens.slice(0, 50) },
+    };
     expect(parseToolShapeBaseline(JSON.stringify(short))).toBeNull();
   });
 });
@@ -133,14 +143,19 @@ describe('suggestFor — advice only where the data can point', () => {
 });
 
 describe('the audit report carries suggestions under the same honesty rules', () => {
-  const stdio = (name: string) => ({
+  const stdio = (name: string): ConfiguredServer => ({
     name,
+    client: 'claude-code',
+    source: '/proj/.mcp.json',
     transport: 'stdio' as const,
     command: 'node',
     argv: ['node', `${name}.js`],
+    envVarNames: [],
   });
   const cfg = (servers: ReturnType<typeof stdio>[]) =>
-    [{ client: 'claude-desktop', source: '/cfg.json', servers }] as Parameters<typeof buildReport>[0];
+    [{ client: 'claude-desktop', source: '/cfg.json', servers }] as Parameters<
+      typeof buildReport
+    >[0];
 
   const verbose = measureTools(
     [
@@ -172,15 +187,23 @@ describe('the audit report carries suggestions under the same honesty rules', ()
   });
 
   it('says in words when nothing is measurably unusual, instead of inventing advice', () => {
-    const quiet = measureTools([{ name: 'ok', description: 'Fine.', inputSchema: { type: 'object' } }], {
-      serverName: 'quiet',
-      launchCommand: 'node quiet.js',
-      envVarNames: [],
-    });
+    const quiet = measureTools(
+      [{ name: 'ok', description: 'Fine.', inputSchema: { type: 'object' } }],
+      {
+        serverName: 'quiet',
+        launchCommand: 'node quiet.js',
+        envVarNames: [],
+      },
+    );
     const a = stdio('quiet');
-    const r = buildReport(cfg([a]), new Map([[serverKey(a), quiet]]), { generatedAt: 'T', toolShape: baseline });
+    const r = buildReport(cfg([a]), new Map([[serverKey(a), quiet]]), {
+      generatedAt: 'T',
+      toolShape: baseline,
+    });
     expect(r.configs[0].suggestions!.outOfDistribution).toHaveLength(0);
-    expect(formatReport(r)).toContain('sits inside the measured distribution — nothing the data can point at');
+    expect(formatReport(r)).toContain(
+      'sits inside the measured distribution — nothing the data can point at',
+    );
   });
 
   it('attaches nothing at all when --suggest did not run', () => {
@@ -195,13 +218,18 @@ describe('the audit report carries suggestions under the same honesty rules', ()
 describe('the committed baseline is the one the measurements derive', () => {
   it('re-derives byte-equal from results/, at its own recorded date', () => {
     const repoRoot = join(import.meta.dirname, '..');
-    const committed = parseToolShapeBaseline(readFileSync(join(repoRoot, 'results', 'tool-shape.json'), 'utf8'));
+    const committed = parseToolShapeBaseline(
+      readFileSync(join(repoRoot, 'results', 'tool-shape.json'), 'utf8'),
+    );
     expect(committed).not.toBeNull();
-    const doc = parse(readFileSync(join(repoRoot, 'servers.yaml'), 'utf8')) as { servers: ServerEntry[] };
+    const doc = parse(readFileSync(join(repoRoot, 'servers.yaml'), 'utf8')) as {
+      servers: ServerEntry[];
+    };
     const tools: ToolMeasurement[] = [];
     let serverCount = 0;
     for (const r of loadRows(doc.servers, repoRoot)) {
-      if (!r.m || (r.m.status !== 'measured' && r.m.status !== 'dynamic') || r.m.tools.length === 0) continue;
+      if (!r.m || (r.m.status !== 'measured' && r.m.status !== 'dynamic') || r.m.tools.length === 0)
+        continue;
       serverCount++;
       tools.push(...r.m.tools);
     }

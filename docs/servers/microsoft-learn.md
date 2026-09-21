@@ -1,6 +1,8 @@
 # microsoft-learn — context cost
 
-**972 tokens** across 3 tools — *lean* (< 1K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**972 tokens** across 3 tools — *lean* (< 1K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
+
+An Anthropic request carries 726 of those tokens as tool definitions, and Claude counts those at **1,612**.
 
 | | |
 |---|---|
@@ -8,7 +10,7 @@
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y mcp-remote https://learn.microsoft.com/api/mcp` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | none |
 | canonical SHA-256 | `9e3f4a65f0dc136a6ffa5ed00f95785ec561e9a78413888da160e44ceb139346` |
 | category | vendor-official |
@@ -16,17 +18,17 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
-|---|---:|---:|---:|---:|
-| microsoft_code_sample_search | 396 | 40.7% | 163 | 111 |
-| microsoft_docs_search | 297 | 30.6% | 129 | 42 |
-| microsoft_docs_fetch | 277 | 28.5% | 196 | 30 |
+| tool | tokens | share | description | input schema | output schema |
+|---|---:|---:|---:|---:|---:|
+| microsoft_code_sample_search | 396 | 40.7% | 163 | 111 | 63 |
+| microsoft_docs_search | 297 | 30.6% | 129 | 42 | 76 |
+| microsoft_docs_fetch | 277 | 28.5% | 196 | 30 | 0 |
 
 Each tool is tokenized on its own, so the parts do not sum exactly to the whole: the array adds its own brackets and commas, and the tokenizer merges tokens across object boundaries. The badge number is always the count of the whole array, never a sum of parts.
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -43,6 +45,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-16 | 972 | 3 | not recorded | not recorded | — |
 | 2026-08-19 | 972 | 3 | not recorded | docker | no change |
 | 2026-09-04 | 972 | 3 | 1.0.0 | docker | no change |
+| 2026-09-16 | 972 | 3 | 1.0.0 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

@@ -10,25 +10,33 @@
       "name": "list_indices",
       "tokens": 72,
       "descriptionTokens": 5,
-      "inputSchemaTokens": 56
+      "inputSchemaTokens": 56,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 0
     },
     {
       "name": "get_mappings",
       "tokens": 76,
       "descriptionTokens": 8,
-      "inputSchemaTokens": 56
+      "inputSchemaTokens": 56,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 0
     },
     {
       "name": "search",
       "tokens": 159,
       "descriptionTokens": 15,
-      "inputSchemaTokens": 135
+      "inputSchemaTokens": 135,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 0
     },
     {
       "name": "get_shards",
       "tokens": 65,
       "descriptionTokens": 8,
-      "inputSchemaTokens": 45
+      "inputSchemaTokens": 45,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 0
     }
   ],
   "canonicalSha256": "76a005f840c738f5788e7b5801fdc12194713fce1ed435ad500f891a2b2dd13c",
@@ -122,7 +130,7 @@
       }
     }
   ],
-  "measuredAt": "2026-09-05T23:43:50.043Z",
+  "measuredAt": "2026-09-09T08:05:11.813Z",
   "serverName": "elasticsearch-mcp",
   "serverVersion": "0.3.1",
   "launchCommand": "npx -y @elastic/mcp-server-elasticsearch",
@@ -131,6 +139,7 @@
     "ES_API_KEY"
   ],
   "serverInstructions": null,
+  "negotiatedProtocolVersion": "2025-06-18",
   "isolation": {
     "docker": true,
     "image": "public.ecr.aws/docker/library/node:22-slim",
@@ -138,5 +147,6 @@
     "note": "network enabled for package fetch; clean FS, no host credentials",
     "arch": "linux/amd64"
   },
-  "timeoutMs": 480000
+  "timeoutMs": 240000,
+  "requestedProtocolVersion": "2025-06-18"
 }

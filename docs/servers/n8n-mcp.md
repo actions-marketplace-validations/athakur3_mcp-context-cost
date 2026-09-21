@@ -1,14 +1,16 @@
 # n8n-mcp — context cost
 
-**2,636 tokens** across 7 tools — *light* (1–5K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**2,636 tokens** across 7 tools — *light* (1–5K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
+
+An Anthropic request carries 2,022 of those tokens as tool definitions, and Claude counts those at **3,902**.
 
 | | |
 |---|---|
-| server (self-reported) | n8n-documentation-mcp v2.82.1 |
+| server (self-reported) | n8n-documentation-mcp v2.85.0 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y n8n-mcp` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | none |
 | canonical SHA-256 | `efc31b255c09a3f364367c1450285b1e107d999faf01d4c9c37711aa12410948` |
 | category | community |
@@ -16,21 +18,21 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
-|---|---:|---:|---:|---:|
-| search_templates | 628 | 23.8% | 65 | 533 |
-| validate_node | 522 | 19.8% | 52 | 182 |
-| get_node | 470 | 17.8% | 85 | 354 |
-| validate_workflow | 432 | 16.4% | 24 | 160 |
-| search_nodes | 297 | 11.3% | 50 | 216 |
-| tools_documentation | 151 | 5.7% | 36 | 84 |
-| get_template | 134 | 5.1% | 28 | 75 |
+| tool | tokens | share | description | input schema | output schema |
+|---|---:|---:|---:|---:|---:|
+| search_templates | 628 | 23.8% | 65 | 533 | 0 |
+| validate_node | 522 | 19.8% | 52 | 182 | 218 |
+| get_node | 470 | 17.8% | 85 | 354 | 0 |
+| validate_workflow | 432 | 16.4% | 24 | 160 | 180 |
+| search_nodes | 297 | 11.3% | 50 | 216 | 0 |
+| tools_documentation | 151 | 5.7% | 36 | 84 | 0 |
+| get_template | 134 | 5.1% | 28 | 75 | 0 |
 
 Each tool is tokenized on its own, so the parts do not sum exactly to the whole: the array adds its own brackets and commas, and the tokenizer merges tokens across object boundaries. The badge number is always the count of the whole array, never a sum of parts.
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -47,6 +49,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-16 | 2,636 | 7 | not recorded | not recorded | — |
 | 2026-08-19 | 2,636 | 7 | not recorded | docker | no change |
 | 2026-09-04 | 2,636 | 7 | 2.82.1 | docker | no change |
+| 2026-09-16 | 2,636 | 7 | 2.85.0 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

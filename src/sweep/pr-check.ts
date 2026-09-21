@@ -6,14 +6,14 @@
  *
  * Diffs the two documents BY NAME and measures only what changed: entries the
  * pull request added, and entries whose launch-affecting fields it changed
- * (`LAUNCH_FIELDS`). The second set is not optional. The roadmap first wrote
- * "measures only the entries the PR added", and that misses the point of the
- * check: a PR that rewrites an existing entry's `command` changes what the
+ * (`LAUNCH_FIELDS`). The second set is not optional. An earlier description of
+ * this check said it "measures only the entries the PR added", and that misses
+ * the point: a PR that rewrites an existing entry's `command` changes what the
  * Wednesday rotation (resweep.yml, `contents: write`) will spawn next, and
  * "added" never sees it. What is launched is what is measured.
  *
  * Nothing is written anywhere. `measureServer` runs with `persist: false`, the
- * form session-start.ts and cross-check.ts already use, and this file imports
+ * form cross-check.ts already uses, and this file imports
  * none of history.js, report.js, regressions.js or regen.js — the number is
  * printed in the check log and the rotation publishes its own later, under its
  * own rules. The measured line here is not the published number and must not
@@ -61,6 +61,7 @@ import { DockerHarnessFault } from './docker.js';
 import { formatProblems, validateServers, type SchemaProblem } from './servers-schema.js';
 import type { ServerEntry } from './report.js';
 import type { Measurement } from '../core/types.js';
+import { flagValue, knownFlagNames, unknownFlags, valuelessFlags } from '../flags.js';
 
 /**
  * The fields that change what a sweep launches — the option object
@@ -137,7 +138,7 @@ function stable(value: unknown): string {
   if (typeof value === 'object' && value !== null) {
     const o = value as Record<string, unknown>;
     return `{${Object.keys(o)
-      .sort()
+      .toSorted()
       .map((k) => `${JSON.stringify(k)}:${stable(o[k])}`)
       .join(',')}}`;
   }
@@ -158,7 +159,8 @@ function entriesOf(doc: unknown): ServerEntry[] {
   const servers = (doc as { servers?: unknown }).servers;
   if (!Array.isArray(servers)) return [];
   return servers.filter(
-    (e): e is ServerEntry => typeof e === 'object' && e !== null && typeof (e as ServerEntry).name === 'string',
+    (e): e is ServerEntry =>
+      typeof e === 'object' && e !== null && typeof (e as ServerEntry).name === 'string',
   );
 }
 
@@ -193,21 +195,44 @@ export function summarise(name: string, m: Measurement, secs: number): string {
   return head + tail;
 }
 
-/** Whether an outcome fails the check. */
+/**
+ * Whether an outcome fails the check.
+ *
+ * A denylist, so a status added to the taxonomy passes unless it is named
+ * here. `protocol-mismatch` is the first one where that default was a decision
+ * rather than an omission, and the reason is worth writing down: the entry
+ * launched, the transport worked and the server answered. The reason there is
+ * no number is the revision *this repository pins*. `auth-required` is the
+ * governing analogue — the server works and this harness lacks something —
+ * and failing a stranger's pull request over our own pin would be the same
+ * category error, one layer up, as publishing `startup-failure` about their
+ * working software. On the day the ecosystem moves, every third-party pull
+ * request would otherwise go red for a reason no contributor could fix.
+ * `summarise` prints the notes either way, so the contributor still sees the
+ * server's own words.
+ */
 export function failsCheck(status: Measurement['status']): boolean {
   return status === 'startup-failure' || status === 'timeout' || status === 'dynamic';
 }
 
-function arg(name: string): string | undefined {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? process.argv[i + 1] : undefined;
-}
-
 // Exact path match, for the reason src/sweep/run.ts states: any other file whose
 // name merely ends the same way would otherwise run this block.
-const isMain = process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const isMain =
+  process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
-  const basePath = arg('base');
+  const SPEC = {
+    value: ['base', 'head', 'default-timeout', 'max-entries'],
+    boolean: ['docker'],
+  };
+  const argv = process.argv.slice(2);
+  const bad = [...unknownFlags(argv, SPEC), ...valuelessFlags(argv, SPEC)];
+  if (bad.length) {
+    console.error(`unrecognised or valueless: ${bad.join(', ')}`);
+    process.exit(2);
+  }
+  const known = knownFlagNames(SPEC);
+
+  const basePath = flagValue(argv, 'base', known);
   if (!basePath) {
     console.error(
       'usage: npx tsx src/sweep/pr-check.ts --base <base servers.yaml> [--head servers.yaml] [--docker] ' +
@@ -215,10 +240,10 @@ if (isMain) {
     );
     process.exit(2);
   }
-  const headPath = arg('head') ?? 'servers.yaml';
-  const docker = process.argv.includes('--docker');
-  const defaultTimeout = Number(arg('default-timeout') ?? 60);
-  const maxEntries = Number(arg('max-entries') ?? DEFAULT_MAX_ENTRIES);
+  const headPath = flagValue(argv, 'head', known) ?? 'servers.yaml';
+  const docker = argv.includes('--docker');
+  const defaultTimeout = Number(flagValue(argv, 'default-timeout', known) ?? 60);
+  const maxEntries = Number(flagValue(argv, 'max-entries', known) ?? DEFAULT_MAX_ENTRIES);
 
   // A parse error is a refusal, not a failed launch: exit 2 with the parser's
   // message, never its stack trace. Base is the committed branch and always
@@ -228,7 +253,9 @@ if (isMain) {
     try {
       return parse(readFileSync(path, 'utf8')) as unknown;
     } catch (err) {
-      console.error(`${path} does not parse as YAML: ${(err as Error).message.trim()}\nnothing was launched`);
+      console.error(
+        `${path} does not parse as YAML: ${(err as Error).message.trim()}\nnothing was launched`,
+      );
       process.exit(2);
     }
   };
@@ -260,7 +287,9 @@ if (isMain) {
   const worst = worstCaseSeconds(selected, defaultTimeout);
   if (worst > budget) {
     const named = launchedEntries(selected)
-      .map((e) => `${e.name} (timeoutSeconds ${e.timeoutSeconds ?? `${defaultTimeout}, the default`})`)
+      .map(
+        (e) => `${e.name} (timeoutSeconds ${e.timeoutSeconds ?? `${defaultTimeout}, the default`})`,
+      )
       .join(', ');
     console.error(
       `the entries this pull request launches could hold the runner for ${worst}s — ${named}, each ` +
@@ -283,7 +312,9 @@ if (isMain) {
   for (const e of selected) {
     const kind = diff.added.includes(e) ? 'added' : 'relaunched';
     if (e.remote) {
-      console.log(`  ${e.name} (${kind}): remote — listed, not measured; an endpoint never reaches initialize without credentials`);
+      console.log(
+        `  ${e.name} (${kind}): remote — listed, not measured; an endpoint never reaches initialize without credentials`,
+      );
       continue;
     }
     if (isSelfContainerised(e.command)) {
@@ -327,7 +358,9 @@ if (isMain) {
       'commit subject with `chore:` — tools/release-readiness.ts fails a servers.yaml commit that does neither.',
   );
   if (failed) {
-    console.error(`${failed} entr${failed === 1 ? 'y does' : 'ies do'} not launch as written; see the lines above`);
+    console.error(
+      `${failed} entr${failed === 1 ? 'y does' : 'ies do'} not launch as written; see the lines above`,
+    );
   }
   process.exit(failed ? 1 : 0);
 }

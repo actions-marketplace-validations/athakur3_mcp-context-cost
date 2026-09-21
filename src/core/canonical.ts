@@ -31,6 +31,34 @@ interface ToolLike {
   name?: string;
   description?: string;
   inputSchema?: unknown;
+  outputSchema?: unknown;
+  annotations?: unknown;
+}
+
+/**
+ * One tool's diagnostic breakdown, from the tool object alone.
+ *
+ * Exported and used by `measureTools` rather than inlined there, because two
+ * other callers have to agree with it exactly: the backfill that fills these
+ * fields in on records written before they existed, and the test that re-derives
+ * every published record's breakdown from that record's own capture. A second
+ * implementation of this arithmetic would be a second answer to the same
+ * question.
+ *
+ * A tool that ships no `outputSchema` or `annotations` records `0`. An absent
+ * key means something else — a record written before this existed — which is
+ * why `ToolMeasurement` makes them optional.
+ */
+export function measureTool(t: unknown): ToolMeasurement {
+  const tool = t as ToolLike;
+  return {
+    name: tool.name ?? '(unnamed)',
+    tokens: countTokens(JSON.stringify(t)),
+    descriptionTokens: tool.description ? countTokens(tool.description) : 0,
+    inputSchemaTokens: tool.inputSchema ? countTokens(JSON.stringify(tool.inputSchema)) : 0,
+    outputSchemaTokens: tool.outputSchema ? countTokens(JSON.stringify(tool.outputSchema)) : 0,
+    annotationsTokens: tool.annotations ? countTokens(JSON.stringify(tool.annotations)) : 0,
+  };
 }
 
 /**
@@ -41,28 +69,27 @@ export function measureTools(
   tools: unknown[],
   meta: {
     serverName: string;
-    serverVersion?: string;
-    launchCommand?: string;
-    envVarNames?: string[];
-    measuredAt?: string;
+    serverVersion?: string | undefined;
+    launchCommand?: string | undefined;
+    envVarNames?: string[] | undefined;
+    measuredAt?: string | undefined;
     /**
      * The initialize `instructions` string, or null when the server returned
      * none. Omit it only when nothing was captured: an omitted field records
      * "never asked", which session-start.ts refuses to read as zero.
      */
-    instructions?: string | null;
+    instructions?: string | null | undefined;
+    /**
+     * The revision the server named at `initialize`. Omit it when nothing was
+     * captured; absent is not the same claim as "the server sent none". The
+     * half this pairs with, `requestedProtocolVersion`, is stamped on the
+     * record by the caller so it reaches failed measurements too.
+     */
+    negotiatedProtocolVersion?: string | undefined;
   },
 ): Measurement {
   const canonical = canonicalString(tools);
-  const perTool: ToolMeasurement[] = tools.map((t) => {
-    const tool = t as ToolLike;
-    return {
-      name: tool.name ?? '(unnamed)',
-      tokens: countTokens(JSON.stringify(t)),
-      descriptionTokens: tool.description ? countTokens(tool.description) : 0,
-      inputSchemaTokens: tool.inputSchema ? countTokens(JSON.stringify(tool.inputSchema)) : 0,
-    };
-  });
+  const perTool: ToolMeasurement[] = tools.map(measureTool);
   return {
     methodologyVersion: METHODOLOGY_VERSION,
     provider: 'tiktoken',
@@ -83,12 +110,22 @@ export function measureTools(
     // Left undefined (and so absent from the JSON) when the caller had nothing
     // to record, which is exactly how a pre-field measurement reads.
     serverInstructions: meta.instructions,
+    // Bare, never `?? null`: the property holding `undefined` is what keeps it
+    // out of the JSON, and a null would have every future record claiming the
+    // server named no revision.
+    negotiatedProtocolVersion: meta.negotiatedProtocolVersion,
   };
 }
 
 export function failedMeasurement(
   status: Exclude<MeasurementStatus, 'measured' | 'dynamic'>,
-  meta: { serverName: string; serverVersion?: string; launchCommand?: string; notes?: string; measuredAt?: string },
+  meta: {
+    serverName: string;
+    serverVersion?: string;
+    launchCommand?: string;
+    notes?: string;
+    measuredAt?: string;
+  },
 ): Measurement {
   return {
     methodologyVersion: METHODOLOGY_VERSION,

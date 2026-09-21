@@ -4,13 +4,15 @@
  * Regenerate after every sweep; the file doubles as the published artifact.
  */
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { parse } from 'yaml';
-import { isCurrent } from '../core/divergence.js';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { isCurrent, mappedTokens } from '../core/divergence.js';
 import type { Measurement } from '../core/types.js';
 import { loadRows, type ServerEntry } from './report.js';
 import { bandColor, BAND_META } from '../core/bands.js';
 import { parseHistory, plottableSeries, type PlottableSeries } from './history.js';
+import { loadServersDoc } from './servers-schema.js';
+import { signed } from '../core/format.js';
 
 /** Longest series a sparkline plots — a stat-tile trend, not a full chart. */
 const SPARK_MAX_POINTS = 12;
@@ -45,7 +47,11 @@ export function renderSparkline(tokens: number[]): string {
 }
 
 const esc = (s: unknown): string =>
-  String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 
 interface Row {
   entry: ServerEntry;
@@ -62,9 +68,11 @@ interface DivergenceEntry {
 }
 
 export function generateDashboard(root = process.cwd()): string {
-  const doc = parse(readFileSync(join(root, 'servers.yaml'), 'utf8')) as { servers: ServerEntry[] };
+  const doc = loadServersDoc(root) as { servers: ServerEntry[] };
   const divergencePath = join(root, 'results', 'divergence.json');
-  const divergence: { model?: string; servers?: Record<string, DivergenceEntry> } = existsSync(divergencePath)
+  const divergence: { model?: string; servers?: Record<string, DivergenceEntry> } = existsSync(
+    divergencePath,
+  )
     ? JSON.parse(readFileSync(divergencePath, 'utf8'))
     : {};
   const dSrv = divergence.servers ?? {};
@@ -79,15 +87,35 @@ export function generateDashboard(root = process.cwd()): string {
   const rows: Row[] = loadRows(doc.servers, root);
 
   const measured = rows
-    .filter((r) => r.m && (r.m.status === 'measured' || r.m.status === 'dynamic') && r.m.totalTokens !== null)
-    .sort((a, b) => (b.m!.totalTokens ?? 0) - (a.m!.totalTokens ?? 0));
+    .filter(
+      (r) =>
+        r.m && (r.m.status === 'measured' || r.m.status === 'dynamic') && r.m.totalTokens !== null,
+    )
+    .toSorted((a, b) => (b.m!.totalTokens ?? 0) - (a.m!.totalTokens ?? 0));
   const pending = rows.filter((r) => !r.m && !r.entry.remote);
   const failed = rows.filter((r) => (r.m && !measured.includes(r)) || r.entry.remote);
 
   const totals = measured.map((r) => r.m!.totalTokens as number);
-  const median = totals.length ? totals.slice().sort((a, b) => a - b)[Math.floor(totals.length / 2)] : 0;
+  const median = totals.length
+    ? totals.slice().toSorted((a, b) => a - b)[Math.floor(totals.length / 2)]
+    : 0;
   const max = totals.length ? Math.max(...totals) : 1;
   const fmt = (n: number) => n.toLocaleString('en-US');
+
+  /**
+   * The other two numbers under the headline tile. The big number is the wire
+   * total, because that is what the board ranks on and what the badge says —
+   * but on its own it is the largest of three true figures, and the one least
+   * like what a request costs. Only the Claude leg can be absent, and it prints
+   * an em-dash rather than falling back to a neighbour.
+   */
+  const priciestCompanions = (() => {
+    const top = measured[0];
+    if (!top?.m) return '';
+    const dRaw = dSrv[top.entry.name];
+    const cur = isCurrent(dRaw as never, top.m.canonicalSha256 ?? null) ? dRaw : undefined;
+    return `${fmt(mappedTokens(top.m.rawToolsCapture ?? []))} carried · ${cur ? fmt(cur.claudeDelta) : '—'} on Claude`;
+  })();
   /**
    * The stamp is the newest measurement on the page, not the moment the page
    * was written.
@@ -102,7 +130,7 @@ export function generateDashboard(root = process.cwd()): string {
   const dates = rows
     .map((r) => String(r.m?.measuredAt ?? '').slice(0, 10))
     .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
-    .sort();
+    .toSorted();
   const newestMeasurement = dates[dates.length - 1] ?? null;
 
   const barRows = measured
@@ -111,7 +139,7 @@ export function generateDashboard(root = process.cwd()): string {
       const t = m.totalTokens as number;
       const band = bandColor(t);
       const meta = BAND_META[band];
-      const largest = [...m.tools].sort((a, b) => b.tokens - a.tokens)[0];
+      const largest = m.tools.toSorted((a, b) => b.tokens - a.tokens)[0];
       const pct = Math.max(1.2, (t / max) * 100);
       // Gated on the capture it was computed from, exactly as the leaderboard
       // gates it: four rows here were publishing a Claude cost derived from
@@ -119,7 +147,9 @@ export function generateDashboard(root = process.cwd()): string {
       // same four.
       const dRaw = dSrv[r.entry.name];
       const div = isCurrent(dRaw as never, m.canonicalSha256 ?? null) ? dRaw : undefined;
-      const claudeTip = div ? ` · in a Claude request: ${fmt(div.claudeDelta)} tok` : '';
+      const claudeTip =
+        ` · carried in a request: ${fmt(mappedTokens(m.rawToolsCapture ?? []))} tok` +
+        (div ? ` · Claude counts those: ${fmt(div.claudeDelta)} tok` : '');
       const series = seriesFor(r.entry.name);
       const tokens = series.rows.map((h) => h.tokens);
       const spark = renderSparkline(tokens);
@@ -138,7 +168,7 @@ export function generateDashboard(root = process.cwd()): string {
   <span class="name">${esc(r.entry.name)}</span>
   <span class="track"><span class="bar" style="width:${pct.toFixed(1)}%"></span></span>
   <span class="spark-cell">${spark}</span>
-  <span class="val"><span class="dot dot-${band}" aria-hidden="true"></span>${fmt(t)}<span class="bandname">${meta.label}</span></span>
+  <span class="val"><span class="dot dot-${band}" aria-hidden="true"></span>${fmt(t)}<span class="bandname">${meta?.label ?? ''}</span></span>
 </a>`;
     })
     .join('\n');
@@ -146,7 +176,9 @@ export function generateDashboard(root = process.cwd()): string {
   const failRows = failed
     .map((r) => {
       const status = r.entry.remote ? 'remote-auth-wall' : (r.m?.status ?? 'not-run');
-      const note = r.entry.remote ? 'OAuth-gated remote server; listed, not measured' : (r.m?.notes ?? '');
+      const note = r.entry.remote
+        ? 'OAuth-gated remote server; listed, not measured'
+        : (r.m?.notes ?? '');
       return `<tr><td>${esc(r.entry.name)}</td><td><span class="chip">${esc(status)}</span></td><td class="note">${esc(note).slice(0, 160)}</td></tr>`;
     })
     .join('\n');
@@ -163,9 +195,9 @@ export function generateDashboard(root = process.cwd()): string {
       const tokens = seriesFor(r.entry.name).rows.map((h) => h.tokens);
       const trend =
         tokens.length > 1
-          ? `${tokens[tokens.length - 1]! - tokens[0]! >= 0 ? '+' : ''}${fmt(tokens[tokens.length - 1]! - tokens[0]!)} over ${tokens.length} sweeps`
+          ? `${signed(tokens[tokens.length - 1]! - tokens[0]!)} over ${tokens.length} sweeps`
           : '—';
-      return `<tr><td>${i + 1}</td><td>${esc(r.entry.name)}</td><td class="num">${fmt(m.totalTokens as number)}</td><td class="num">${div ? fmt(div.claudeDelta) : '—'}</td><td class="num">${esc(m.toolCount)}</td><td>${esc(BAND_META[bandColor(m.totalTokens as number)].label)}</td><td>${esc(r.entry.category)}</td><td class="num">${trend}</td></tr>`;
+      return `<tr><td>${i + 1}</td><td>${esc(r.entry.name)}</td><td class="num">${fmt(m.totalTokens as number)}</td><td class="num">${fmt(mappedTokens(m.rawToolsCapture ?? []))}</td><td class="num">${div ? fmt(div.claudeDelta) : '—'}</td><td class="num">${esc(m.toolCount)}</td><td>${esc(BAND_META[bandColor(m.totalTokens as number)]?.label ?? '')}</td><td>${esc(r.entry.category)}</td><td class="num">${trend}</td></tr>`;
     })
     .join('\n');
 
@@ -223,6 +255,9 @@ export function generateDashboard(root = process.cwd()): string {
   .stat { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px 10px; }
   .stat .n { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; font-size: 1.45rem; font-weight: 600; display: block; }
   .stat .l { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  /* Companion figures under a headline number. The .l label style is muted,
+     tracked and uppercased, which is wrong for digits — so digits get their own. */
+  .stat .t { display: block; margin-top: 3px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; font-size: 11px; color: var(--muted); }
 
   .board { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
   .row { display: grid; grid-template-columns: 2ch minmax(120px, 190px) 1fr 56px max-content; gap: 10px; align-items: center; padding: 3px 4px; border-radius: 4px; outline: none; color: inherit; text-decoration: none; }
@@ -276,8 +311,8 @@ export function generateDashboard(root = process.cwd()): string {
 
   <div class="stats">
     <div class="stat"><span class="n">${measured.length}<span style="font-size:0.9rem;color:var(--muted)">/${rows.length}</span></span><span class="l">servers measured</span></div>
-    <div class="stat"><span class="n">${fmt(median)}</span><span class="l">median tokens</span></div>
-    <div class="stat"><span class="n">${fmt(max === 1 ? 0 : max)}</span><span class="l">priciest (${esc(measured[0]?.entry.name ?? '—')})</span></div>
+    <div class="stat"><span class="n">${median === undefined ? '—' : fmt(median)}</span><span class="l">median tokens</span></div>
+    <div class="stat"><span class="n">${fmt(max === 1 ? 0 : max)}</span><span class="l">priciest on the wire (${esc(measured[0]?.entry.name ?? '—')})</span><span class="t">${priciestCompanions}</span></div>
     <div class="stat"><span class="n">${pending.length}</span><span class="l">pending sweep</span></div>
   </div>
 
@@ -308,14 +343,15 @@ ${barRows || '<p class="h2sub">Sweep in progress — first results land shortly.
 
   <details><summary>Full data table</summary>
   <div class="tablewrap" style="margin-top:10px"><table>
-    <thead><tr><th>#</th><th>server</th><th>tokens (o200k)</th><th>claude req</th><th>tools</th><th>band</th><th>category</th><th>trend</th></tr></thead>
+    <thead><tr><th>#</th><th>server</th><th>wire (o200k)</th><th>mapped</th><th>claude req</th><th>tools</th><th>band</th><th>category</th><th>trend</th></tr></thead>
     <tbody>${tableRows}</tbody>
   </table></div>
   </details>
 
   <footer>
     Reproduce any number: <code>mcp-context-cost verify results/&lt;server&gt;/measurement.json</code> — re-derives tokens + SHA-256 from the raw capture.
-    Bands are provisional until frozen against the full-sweep distribution.
+    Band thresholds are frozen; the values, and the day they froze, are in the
+    <a href="METHODOLOGY.html#color-bands">methodology</a>.
   </footer>
 </div>
 <div id="tip" role="status"></div>
@@ -351,14 +387,20 @@ ${barRows || '<p class="h2sub">Sweep in progress — first results land shortly.
  * when only the CLI wrote it every sweep updated `results/` and `docs/servers/`
  * while the page people actually open kept the previous run's numbers.
  */
-export function writeDashboard(root = process.cwd(), out = 'docs/dashboard.html'): { out: string; bytes: number } {
+export function writeDashboard(
+  root = process.cwd(),
+  out = 'docs/dashboard.html',
+): { out: string; bytes: number } {
   const html = generateDashboard(root);
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, html);
   return { out, bytes: html.length };
 }
 
-const isMain = process.argv[1]?.endsWith('dashboard.ts') || process.argv[1]?.endsWith('dashboard.js');
+// Exact path match, not endsWith('dashboard.ts'), for the reason src/sweep/run.ts
+// states: any other file whose name happens to end that way would run this block.
+const isMain =
+  process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
   const i = process.argv.indexOf('--out');
   const w = writeDashboard(process.cwd(), i >= 0 ? process.argv[i + 1] : 'docs/dashboard.html');

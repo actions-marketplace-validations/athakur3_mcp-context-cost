@@ -9,44 +9,34 @@ import {
   serverPageUrl,
 } from '../src/sweep/server-pages.js';
 import type { Measurement } from '../src/core/types.js';
+import { measurement } from './factories.js';
 import type { ServerEntry } from '../src/sweep/report.js';
 
-function measurement(over: Partial<Measurement> = {}): Measurement {
-  return {
-    methodologyVersion: '1.0',
-    provider: 'tiktoken',
-    encoding: 'o200k_base',
-    status: 'measured',
+const entry: ServerEntry = { name: 'demo', command: 'npx -y demo-mcp', category: 'search' };
+
+describe('renderServerPage', () => {
+  // Every value these three assertions read back off the page, stated where
+  // the page is rendered.
+  const demo = measurement({
     totalTokens: 1000,
     toolCount: 2,
     tools: [
       { name: 'search', tokens: 700, descriptionTokens: 100, inputSchemaTokens: 560 },
       { name: 'fetch', tokens: 280, descriptionTokens: 40, inputSchemaTokens: 200 },
     ],
-    canonicalSha256: 'a'.repeat(64),
-    rawToolsCapture: [],
-    measuredAt: '2026-08-16T12:08:31.393Z',
-    serverName: 'demo-server',
-    serverVersion: '1.2.0',
     launchCommand: 'npx -y demo-mcp',
-    envVarNames: [],
     isolation: { docker: true, image: 'node:22-slim', network: 'bridge' },
-    ...over,
-  };
-}
+  });
 
-const entry: ServerEntry = { name: 'demo', command: 'npx -y demo-mcp', category: 'search' };
-
-describe('renderServerPage', () => {
   it('leads with the number, band and tool count', () => {
-    const md = renderServerPage(entry, measurement());
+    const md = renderServerPage(entry, demo);
     expect(md).toContain('# demo — context cost');
     expect(md).toContain('**1,000 tokens** across 2 tools');
     expect(md).toContain('*light*');
   });
 
   it('records what makes the number checkable', () => {
-    const md = renderServerPage(entry, measurement());
+    const md = renderServerPage(entry, demo);
     expect(md).toContain('npx -y demo-mcp');
     expect(md).toContain('a'.repeat(64));
     expect(md).toContain('o200k_base');
@@ -56,8 +46,10 @@ describe('renderServerPage', () => {
   });
 
   it('breaks tokens down per tool, largest first, with shares', () => {
-    const md = renderServerPage(entry, measurement());
-    const rows = md.split('\n').filter((l) => l.startsWith('| search |') || l.startsWith('| fetch |'));
+    const md = renderServerPage(entry, demo);
+    const rows = md
+      .split('\n')
+      .filter((l) => l.startsWith('| search |') || l.startsWith('| fetch |'));
     expect(rows[0]).toContain('| search | 700 | 70.0% | 100 | 560 |');
     expect(rows[1]).toContain('| fetch | 280 | 28.0% | 40 | 200 |');
   });
@@ -79,7 +71,9 @@ describe('renderServerPage', () => {
   it('escapes markdown table syntax in third-party tool names', () => {
     const md = renderServerPage(
       entry,
-      measurement({ tools: [{ name: 'a|b`c[d]', tokens: 10, descriptionTokens: 1, inputSchemaTokens: 2 }] }),
+      measurement({
+        tools: [{ name: 'a|b`c[d]', tokens: 10, descriptionTokens: 1, inputSchemaTokens: 2 }],
+      }),
     );
     expect(md).toContain('a\\|b\\`c\\[d\\]');
     expect(md).not.toContain('| a|b');
@@ -92,7 +86,15 @@ describe('renderServerPage', () => {
 
   it('shows the series only once there is more than one date', () => {
     const one = [
-      { date: '2026-08-16', server: 'demo', tokens: 1000, toolCount: 2, status: 'measured', isolation: 'docker', version: '' },
+      {
+        date: '2026-08-16',
+        server: 'demo',
+        tokens: 1000,
+        toolCount: 2,
+        status: 'measured',
+        isolation: 'docker',
+        version: '',
+      },
     ];
     expect(renderServerPage(entry, measurement(), one)).not.toContain('## Over time');
 
@@ -100,7 +102,15 @@ describe('renderServerPage', () => {
       ...one,
       // The newer row names its release and the older one does not, which is
       // the shape of the committed file while the rotation fills the column in.
-      { date: '2026-08-23', server: 'demo', tokens: 1200, toolCount: 3, status: 'measured', isolation: 'docker', version: '1.29.1' },
+      {
+        date: '2026-08-23',
+        server: 'demo',
+        tokens: 1200,
+        toolCount: 3,
+        status: 'measured',
+        isolation: 'docker',
+        version: '1.29.1',
+      },
     ];
     const md = renderServerPage(entry, measurement(), two);
     expect(md).toContain('## Over time');
@@ -113,7 +123,10 @@ describe('renderServerIndex', () => {
   it('ranks measured servers and links their pages', () => {
     const md = renderServerIndex([
       { entry: { name: 'small', command: 'x' }, m: measurement({ totalTokens: 10, toolCount: 1 }) },
-      { entry: { name: 'big', command: 'x' }, m: measurement({ totalTokens: 90_000, toolCount: 3 }) },
+      {
+        entry: { name: 'big', command: 'x' },
+        m: measurement({ totalTokens: 90_000, toolCount: 3 }),
+      },
     ]);
     const ranked = md.split('\n').filter((l) => /^\| \d+ \|/.test(l));
     expect(ranked[0]).toContain('[big](big.html)');
@@ -125,7 +138,10 @@ describe('renderServerIndex', () => {
   it('lists unmeasured candidates with their status and no link', () => {
     const md = renderServerIndex([
       { entry: { name: 'ok', command: 'x' }, m: measurement() },
-      { entry: { name: 'broken', command: 'x' }, m: measurement({ status: 'startup-failure', totalTokens: null }) },
+      {
+        entry: { name: 'broken', command: 'x' },
+        m: measurement({ status: 'startup-failure', totalTokens: null }),
+      },
       { entry: { name: 'walled', command: 'x', remote: true }, m: null },
       { entry: { name: 'fresh', command: 'x' }, m: null },
     ]);
@@ -162,7 +178,9 @@ describe('writeServerPages', () => {
     expect(out.pages).toBe(1);
     expect(existsSync(join(root, 'docs', 'servers', 'demo.md'))).toBe(true);
     expect(existsSync(join(root, 'docs', 'servers', 'nope.md'))).toBe(false);
-    expect(readFileSync(join(root, 'docs', 'servers', 'index.md'), 'utf8')).toContain('[demo](demo.html)');
+    expect(readFileSync(join(root, 'docs', 'servers', 'index.md'), 'utf8')).toContain(
+      '[demo](demo.html)',
+    );
   });
 
   it('folds that server’s history rows into its page', () => {
@@ -231,12 +249,155 @@ describe('writeServerPages', () => {
     seed('half', 'corrupt');
     const out = writeServerPages([entry, { name: 'half', command: 'x' }], root);
     expect(out.pages).toBe(1);
-    expect(readFileSync(join(root, 'docs', 'servers', 'index.md'), 'utf8')).toContain('| half | not-yet-run |');
+    expect(readFileSync(join(root, 'docs', 'servers', 'index.md'), 'utf8')).toContain(
+      '| half | not-yet-run |',
+    );
   });
 });
 
 describe('serverPageUrl', () => {
   it('is the published Pages URL for the server', () => {
-    expect(serverPageUrl('demo')).toBe('https://athakur3.github.io/mcp-context-cost/servers/demo.html');
+    expect(serverPageUrl('demo')).toBe(
+      'https://athakur3.github.io/mcp-context-cost/servers/demo.html',
+    );
+  });
+});
+
+/**
+ * A number is only as portable as the machine that made it, and until now the
+ * page said everything about the conditions except that one.
+ *
+ * `isolation.arch` has been recorded since 0.12.0 and rendered nowhere, so a
+ * reader saw the image and the network and not the architecture — the condition
+ * that decides whether a package could run at all. `local-mcp` is why the field
+ * exists: published as a broken server on the strength of a run whose real
+ * finding was the machine. A field recorded and never shown fixes nothing.
+ */
+
+/**
+ * A number is only as portable as the machine that made it, and the page said
+ * everything about the conditions except that one.
+ *
+ * `isolation.arch` has been recorded since 0.12.0 and rendered nowhere, so a
+ * reader saw the image and the network but not the architecture — the condition
+ * that decides whether a package could run at all. `local-mcp` is why the field
+ * exists: it was published as a broken server on the strength of a run whose
+ * real finding was the machine. A field recorded and never shown fixes nothing.
+ */
+describe('the page says which machine made the number', () => {
+  it('prints the architecture beside the image', () => {
+    const md = renderServerPage(
+      entry,
+      measurement({
+        isolation: { docker: true, image: 'node:22-slim', network: 'bridge', arch: 'linux/amd64' },
+      }),
+    );
+    expect(md).toContain('docker · node:22-slim · network bridge · linux/amd64');
+  });
+
+  it('says an absent architecture is not on record, rather than leaving it out', () => {
+    // Absent means unknown. Omitting it reads as "the same as yours", which is
+    // the claim this field exists to stop anyone making.
+    const md = renderServerPage(
+      entry,
+      measurement({ isolation: { docker: true, image: 'node:22-slim', network: 'bridge' } }),
+    );
+    expect(md).toContain('architecture not on record');
+  });
+
+  it('names the machine for an uncontained run too', () => {
+    const md = renderServerPage(
+      entry,
+      measurement({ isolation: { docker: false, arch: 'darwin/arm64' } }),
+    );
+    expect(md).toContain('host process (no container) · darwin/arm64');
+  });
+});
+
+/**
+ * Output schemas are about a sixth of every published token across the set, and
+ * until the attribution existed the per-tool table could show a 1,092-token tool
+ * whose description and input schema were 24 tokens each, with no way to see
+ * that a 995-token output schema was the rest of it. The column exists to
+ * answer that, and it stays off the two thirds of pages with nothing to put in
+ * it — a column of zeroes is a worse page, not a more complete one.
+ */
+describe('the per-tool table names the output schema when there is one', () => {
+  it('adds the column, and only for a server that ships one', () => {
+    const md = renderServerPage(
+      entry,
+      measurement({
+        totalTokens: 1000,
+        toolCount: 2,
+        tools: [
+          {
+            name: 'search',
+            tokens: 700,
+            descriptionTokens: 100,
+            inputSchemaTokens: 60,
+            outputSchemaTokens: 500,
+            annotationsTokens: 20,
+          },
+          {
+            name: 'fetch',
+            tokens: 280,
+            descriptionTokens: 40,
+            inputSchemaTokens: 200,
+            outputSchemaTokens: 0,
+            annotationsTokens: 0,
+          },
+        ],
+      }),
+    );
+    expect(md).toContain('| tool | tokens | share | description | input schema | output schema |');
+    expect(md).toContain('| search | 700 | 70.0% | 100 | 60 | 500 |');
+    expect(md).toContain('| fetch | 280 | 28.0% | 40 | 200 | 0 |');
+  });
+
+  it('leaves the column off when every tool reports zero', () => {
+    const md = renderServerPage(
+      entry,
+      measurement({
+        tools: [
+          {
+            name: 'search',
+            tokens: 700,
+            descriptionTokens: 100,
+            inputSchemaTokens: 560,
+            outputSchemaTokens: 0,
+            annotationsTokens: 0,
+          },
+        ],
+      }),
+    );
+    expect(md).toContain('| tool | tokens | share | description | input schema |');
+    expect(md).not.toContain('output schema');
+  });
+
+  it('leaves it off for a record written before the field existed', () => {
+    // Absent is not zero anywhere else in this project, and it must not become
+    // zero here: a pre-attribution record has nothing to say about output
+    // schemas, so the page says nothing about them.
+    const md = renderServerPage(entry, measurement());
+    expect(md).not.toContain('output schema');
+  });
+
+  it('never counts annotations as a column, only in the record', () => {
+    const md = renderServerPage(
+      entry,
+      measurement({
+        tools: [
+          {
+            name: 'search',
+            tokens: 700,
+            descriptionTokens: 100,
+            inputSchemaTokens: 560,
+            outputSchemaTokens: 0,
+            annotationsTokens: 90,
+          },
+        ],
+      }),
+    );
+    expect(md).not.toContain('annotations |');
   });
 });

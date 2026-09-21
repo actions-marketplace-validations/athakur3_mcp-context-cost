@@ -1,6 +1,8 @@
 # terraform — context cost
 
-**2,061 tokens** across 9 tools — *light* (1–5K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**2,061 tokens** across 9 tools — *light* (1–5K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
+
+An Anthropic request carries 1,718 of those tokens as tool definitions, and Claude counts those at **3,248**.
 
 | | |
 |---|---|
@@ -8,7 +10,7 @@
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `docker run -i --rm hashicorp/terraform-mcp-server` |
-| isolation | docker · command is itself a docker run (host-spawned container) |
+| isolation | docker · architecture not on record · command is itself a docker run (host-spawned container) |
 | env vars supplied | none |
 | canonical SHA-256 | `7205f4d29a1a97d6fa9d13d2e9b3c2ccc5e8dda8539cf836d5895380c56c4b3b` |
 | category | vendor-official |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | search_providers | 484 | 23.5% | 132 | 293 |
 | get_provider_capabilities | 305 | 14.8% | 138 | 110 |
@@ -32,7 +34,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -51,6 +53,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-26 | 2,061 | 9 | not recorded | docker | no change |
 | 2026-09-03 | 2,061 | 9 | not recorded | docker | no change |
 | 2026-09-04 | 2,061 | 9 | 1.3.0 | docker | no change |
+| 2026-09-16 | 2,061 | 9 | 1.3.0 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

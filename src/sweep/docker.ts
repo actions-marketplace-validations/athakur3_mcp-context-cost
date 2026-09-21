@@ -7,9 +7,9 @@
  */
 export interface DockerOptions {
   /** Base image; default node:22-slim (use a uv image for python servers). */
-  image?: string;
+  image?: string | undefined;
   /** Extra env var NAMES to pass through with dummy values. */
-  dummyEnv?: string[];
+  dummyEnv?: string[] | undefined;
   /**
    * Override the literal `dummy` value for specific `dummyEnv` names. Some
    * servers parse an env var's shape before ever reaching tools/list (a URI
@@ -19,9 +19,9 @@ export interface DockerOptions {
    * connect. A locally-scoped placeholder (`bolt://localhost:7687`) clears
    * that parse step without providing a working credential.
    */
-  dummyEnvValues?: Record<string, string>;
+  dummyEnvValues?: Record<string, string> | undefined;
   /** Container name, so a timed-out container can be force-removed. */
-  containerName?: string;
+  containerName?: string | undefined;
   /**
    * Install `git` inside the container before launch. The slim base images
    * carry no VCS, so `uvx --from git+...` installs fail with "Git executable
@@ -29,7 +29,7 @@ export interface DockerOptions {
    * recorded `launchCommand`, so the published command stays what a user with
    * git already on PATH would actually run.
    */
-  needsGit?: boolean;
+  needsGit?: boolean | undefined;
   /**
    * Debian packages to install before launch, for a server whose runtime needs
    * a native library the slim base image does not carry.
@@ -46,14 +46,14 @@ export interface DockerOptions {
    * The isolation record names what was installed either way, so a reader can
    * see that the container was not the plain one.
    */
-  aptPackages?: string[];
+  aptPackages?: string[] | undefined;
   /**
    * Extra `-v` bind mounts, verbatim (`host:container:ro`). Used to hand a
    * host-verified binary into the container (the cross-check CLI); mounts here
    * should be read-only so the isolation claim — clean FS, no host credentials
    * — survives them.
    */
-  binds?: string[];
+  binds?: string[] | undefined;
   /**
    * Skip the shared npm/uv cache volumes, paying a cold install for a clean one.
    *
@@ -66,7 +66,7 @@ export interface DockerOptions {
    * that apart from a genuinely broken server, so the sweep retries here rather
    * than publishing the downgrade.
    */
-  noSharedCache?: boolean;
+  noSharedCache?: boolean | undefined;
 }
 
 // ECR Public / ghcr mirrors — Docker Hub pulls hang on some networks (observed
@@ -102,7 +102,9 @@ export class DockerHarnessFault extends Error {}
  * its exit codes.
  */
 export function isDockerRunFailure(message: string): boolean {
-  return /server exited \(code 125\)/.test(message) && /Unable to find image|docker: /.test(message);
+  return (
+    /server exited \(code 125\)/.test(message) && /Unable to find image|docker: /.test(message)
+  );
 }
 
 export interface EnsureImageOptions {
@@ -113,7 +115,9 @@ export interface EnsureImageOptions {
   sleep?: (ms: number) => Promise<void>;
 }
 
-function runDocker(args: string[]): Promise<{ code: number | null; stdout: string; stderr: string }> {
+function runDocker(
+  args: string[],
+): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return import('node:child_process').then(
     ({ spawn }) =>
       new Promise((resolve) => {
@@ -135,7 +139,9 @@ async function ensureImageOnce(image: string, opts: EnsureImageOptions): Promise
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const delays = opts.delaysMs ?? [2_000, 8_000];
   const noDocker = (stderr: string) =>
-    new DockerHarnessFault(`docker is not runnable on this machine: ${stderr.trim() || 'spawn docker failed'}`);
+    new DockerHarnessFault(
+      `docker is not runnable on this machine: ${stderr.trim() || 'spawn docker failed'}`,
+    );
 
   const inspect = await run(['image', 'inspect', image]);
   if (inspect.code === 0) return;
@@ -148,7 +154,7 @@ async function ensureImageOnce(image: string, opts: EnsureImageOptions): Promise
     lastStderr = pull.stderr;
     // A missing docker binary cannot appear on a later attempt.
     if (pull.code === null && /ENOENT/i.test(pull.stderr)) throw noDocker(pull.stderr);
-    if (attempt <= delays.length) await sleep(delays[attempt - 1]);
+    if (attempt <= delays.length) await sleep(delays[attempt - 1]!);
   }
   throw new DockerHarnessFault(
     `could not pull ${image} after ${delays.length + 1} attempts — ` +
@@ -235,7 +241,10 @@ export function platformFromUname(output: string): string | null {
  * Returns null when docker cannot say, leaving `arch` absent — which the
  * record already documents as "unknown, never the same as yours".
  */
-export async function containerPlatform(image: string, opts: EnsureImageOptions = {}): Promise<string | null> {
+export async function containerPlatform(
+  image: string,
+  opts: EnsureImageOptions = {},
+): Promise<string | null> {
   const run = opts.run ?? runDocker;
   if (!opts.run) {
     const cached = platforms.get(image);

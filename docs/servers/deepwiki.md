@@ -2,13 +2,15 @@
 
 **359 tokens** across 3 tools — *lean* (< 1K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
 
+An Anthropic request carries 233 of those tokens as tool definitions, and Claude counts those at **707**.
+
 | | |
 |---|---|
 | server (self-reported) | DeepWiki v2.14.3 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y mcp-remote https://mcp.deepwiki.com/mcp` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | none |
 | canonical SHA-256 | `3735162916165ab23696fc91fbf626bd99a36ddcd1e15746e91e16c7e336b379` |
 | category | vendor-official |
@@ -16,17 +18,17 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
-|---|---:|---:|---:|---:|
-| ask_question | 148 | 41.2% | 19 | 76 |
-| read_wiki_structure | 108 | 30.1% | 12 | 41 |
-| read_wiki_contents | 104 | 29.0% | 8 | 41 |
+| tool | tokens | share | description | input schema | output schema |
+|---|---:|---:|---:|---:|---:|
+| ask_question | 148 | 41.2% | 19 | 76 | 28 |
+| read_wiki_structure | 108 | 30.1% | 12 | 41 | 28 |
+| read_wiki_contents | 104 | 29.0% | 8 | 41 | 28 |
 
 Each tool is tokenized on its own, so the parts do not sum exactly to the whole: the array adds its own brackets and commas, and the tokenizer merges tokens across object boundaries. The badge number is always the count of the whole array, never a sum of parts.
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|

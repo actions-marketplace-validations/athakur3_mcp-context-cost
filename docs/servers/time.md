@@ -1,14 +1,16 @@
 # time — context cost
 
-**293 tokens** across 2 tools — *lean* (< 1K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**293 tokens** across 2 tools — *lean* (< 1K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
+
+An Anthropic request carries 239 of those tokens as tool definitions, and Claude counts those at **703**.
 
 | | |
 |---|---|
-| server (self-reported) | mcp-time v1.29.1 |
+| server (self-reported) | mcp-time v1.30.0 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `uvx --with "mcp\<2" mcp-server-time` |
-| isolation | docker · ghcr.io/astral-sh/uv:python3.12-bookworm-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · ghcr.io/astral-sh/uv:python3.12-bookworm-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | none |
 | canonical SHA-256 | `7c6ff08840620894a66a103e02a8eb315013dd0a7d7c6cfb59b0fbe51f8a5d87` |
 | category | official-reference |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | convert_time | 186 | 63.5% | 5 | 143 |
 | get_current_time | 105 | 35.8% | 7 | 59 |
@@ -25,7 +27,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -41,6 +43,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 |---|---:|---:|---|---|---:|
 | 2026-08-18 | 293 | 2 | not recorded | docker | — |
 | 2026-09-04 | 293 | 2 | 1.29.1 | docker | no change |
+| 2026-09-16 | 293 | 2 | 1.30.0 | docker | no change |
 
 Full series: [results/history.csv](https://github.com/athakur3/mcp-context-cost/blob/main/results/history.csv).
 

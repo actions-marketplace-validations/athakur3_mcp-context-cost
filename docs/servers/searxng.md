@@ -2,13 +2,15 @@
 
 **1,537 tokens** across 4 tools — *light* (1–5K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
 
+An Anthropic request carries 1,480 of those tokens as tool definitions, and Claude counts those at **2,726**.
+
 | | |
 |---|---|
 | server (self-reported) | ihor-sokoliuk/mcp-searxng v2.1.0 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y mcp-searxng` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · architecture not on record · network enabled for package fetch; clean FS, no host credent |
 | env vars supplied | SEARXNG_URL |
 | canonical SHA-256 | `277906d8ed722cfce33b345e34effdc0a2c37c8effc4fc85c9f5d13888d6ea7f` |
 | category | community |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | searxng_web_search | 825 | 53.7% | 153 | 643 |
 | web_url_read | 429 | 27.9% | 259 | 145 |
@@ -27,7 +29,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|

@@ -1,6 +1,8 @@
 # airbnb — context cost
 
-**486 tokens** across 2 tools — *lean* (< 1K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**486 tokens** across 2 tools — *lean* (< 1K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
+
+An Anthropic request carries 486 of those tokens as tool definitions, and Claude counts those at **1,169**.
 
 | | |
 |---|---|
@@ -8,7 +10,7 @@
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y @openbnb/mcp-server-airbnb` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | none |
 | canonical SHA-256 | `79c3109b4fa4e4735ba1071cacbd98948c6aba20b70c9a4295a78e84850a81e0` |
 | category | community |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | airbnb_search | 319 | 65.6% | 16 | 291 |
 | airbnb_listing_details | 165 | 34.0% | 15 | 137 |
@@ -25,7 +27,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -42,6 +44,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-16 | 486 | 2 | not recorded | not recorded | — |
 | 2026-08-19 | 486 | 2 | not recorded | docker | no change |
 | 2026-09-04 | 486 | 2 | 0.3.0 | docker | no change |
+| 2026-09-16 | 486 | 2 | 0.3.0 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

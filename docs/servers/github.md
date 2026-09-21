@@ -2,13 +2,15 @@
 
 **54,622 tokens** across 44 tools — *very heavy* (≥ 30K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
 
+An Anthropic request carries 10,735 of those tokens as tool definitions, and Claude counts those at **18,728**.
+
 | | |
 |---|---|
 | server (self-reported) | github-mcp-server v1.11.0 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `docker run -i --rm -e GITHUB_PERSONAL_ACCESS_TOKEN=dummy ghcr.io/github/github-mcp-server` |
-| isolation | docker · command is itself a docker run (host-spawned container) |
+| isolation | docker · linux/amd64 · command is itself a docker run (host-spawned container) |
 | env vars supplied | GITHUB_PERSONAL_ACCESS_TOKEN |
 | canonical SHA-256 | `40d73048f0112cd8282ee61d586632738f6746678ece24f8f61f4dcc4b8b2135` |
 | category | vendor-official |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | issue_write | 2,050 | 3.8% | 14 | 779 |
 | list_issues | 1,787 | 3.3% | 33 | 501 |
@@ -55,7 +57,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|

@@ -2,13 +2,15 @@
 
 **8,446 tokens** across 37 tools — *moderate* (5–15K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
 
+An Anthropic request carries 8,149 of those tokens as tool definitions, and Claude counts those at **14,196**.
+
 | | |
 |---|---|
 | server (self-reported) | mcp-ssh-manager v3.8.5 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y mcp-ssh-manager` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · architecture not on record · network enabled for package fetch; clean FS, no host credent |
 | env vars supplied | none |
 | canonical SHA-256 | `22ce75f27b9a8bf50f1cb77824b5769d6041d1f3c25032916b5201b1be31f5d7` |
 | category | community |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | ssh_sync | 477 | 5.6% | 174 | 285 |
 | ssh_backup_create | 387 | 4.6% | 84 | 284 |
@@ -55,7 +57,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|

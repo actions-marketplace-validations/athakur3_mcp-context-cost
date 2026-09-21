@@ -2,13 +2,15 @@
 
 **978 tokens** across 5 tools — *lean* (< 1K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
 
+An Anthropic request carries 879 of those tokens as tool definitions, and Claude counts those at **1,859**.
+
 | | |
 |---|---|
 | server (self-reported) | Bright Data v2.11.1 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y @brightdata/mcp` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | API_TOKEN |
 | canonical SHA-256 | `bd26660364200a7866906bbfecc185e41ea6a42e43ed5d6380b1c3b77a699eae` |
 | category | vendor-official |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | discover | 347 | 35.5% | 38 | 281 |
 | search_engine_batch | 191 | 19.5% | 17 | 142 |
@@ -28,7 +30,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|

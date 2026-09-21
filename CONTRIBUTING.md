@@ -35,6 +35,7 @@ and no others:
 | `envValues` | optional | A shaped placeholder for a name in `env`, for a server that parses the variable before `tools/list`. See [env](#env-names-never-values). |
 | `notApplicable` | optional | A declared harness limitation — `reason` and the `evidence` text the failure must contain. Corroborated on every sweep, never taken on trust: [METHODOLOGY](docs/METHODOLOGY.md#failure-taxonomy--no-silent-drops). |
 | `deprecated` | optional | The package's own deprecation: `version`, `source` URL, `readOn` date, optional `replacement`. The row stays and is annotated. |
+| `nameCollision` | optional | A different project of the same name that this entry does **not** measure: `project`, `source` URL, `readOn` date. The leaderboard shows only `name`, so a shared one can be read as the wrong software; this puts the distinction on the leaderboard and the server page. Renaming the entry is not the fix — `name` keys `results/`, `badges/`, the capture index and every history row. |
 
 Which fields are required, and what each check says when it fails, is the table `FIELDS`
 and the validator in `src/sweep/servers-schema.ts`; `test/contributing.test.ts` holds this
@@ -85,9 +86,12 @@ order that goes green:
 3. **Add one bullet under `## Unreleased` in `CHANGELOG.md` naming the entry.** The gate's
    second check, "the changelog says nothing about work that ships", fails any non-`chore:`
    commit since the last release that touches `servers.yaml` while that section has no
-   bullet. It tests only that a bullet exists (`section.includes('\n- ')` in
-   `tools/release-readiness.ts`) and never reads what the bullet says, so a section that
-   already carries someone else's bullet lets an unmentioned entry through. Naming the entry
+   bullet. It fails only on a section with no bullet at all
+   (`section.match(/\n- /g)` in `tools/release-readiness.ts`) and never reads what a bullet
+   says — it cannot, because bullets do not cite commits. A section already carrying someone
+   else's bullet therefore still passes; what the gate does about that is print the shipping
+   commits whenever there are more of them than bullets, so an incomplete section is visible
+   to whoever is cutting rather than silent. Naming the entry
    is the convention, not the gate; the line `src/sweep/pr-check.ts` prints at the end of
    every run says the same — add a bullet, or start the commit subject with `chore:`. That
    prefix belongs to the bots' commits; write the bullet.
@@ -147,8 +151,8 @@ runner's own daemon with the pull request's argv, so the check prints
 
 and moves on with exit 0 (`src/sweep/pr-check.ts`). And an entry with `remote: true` is
 listed and never launched anywhere: an OAuth-walled endpoint never reaches `initialize`
-without credentials, and measuring one with a real key is on the roadmap's
-[not-planned list](ROADMAP.md#not-planned). A remote endpoint that needs no credential is
+without credentials, and measuring one with a real key is on the
+[not-planned list](#not-planned) below. A remote endpoint that needs no credential is
 measured through the `mcp-remote` bridge instead, with `npx -y mcp-remote <url>` as its
 `command` and no `remote` flag (`cloudflare-docs`, `deepwiki`).
 
@@ -178,16 +182,10 @@ know about it:
 - **Without `--no-persist` the same command writes** `results/<name>/measurement.json`,
   `badges/<name>.json` and a `results/history.csv` row into your checkout, and nothing in
   `.gitignore` refuses them. Those files must not be in the pull request.
-- **The number it prints is never the published one.** The roadmap's not-planned list states
-  the rule: "Publishing any measurement taken on a developer machine. CI measures; the
-  laptop probes." The record behind it is `local-mcp`: its failing record was made on an
-  arm64 laptop and its stderr named an architecture the record itself did not, which is why
-  every measurement now records `isolation.arch`. The entry then turned out to be unavailable
-  on both architectures, and a record that says where it was made is what let that be told
-  from a broken server ("A record says which machine made it",
-  [CHANGELOG 0.12.0](CHANGELOG.md)), and `resweep.yml`'s header says why re-measuring a
-  handful of entries never needs a laptop: a developer machine is a different architecture
-  under different load, and a measurement taken there describes it rather than the server.
+- **The number it prints is never the published one.** The rule is in the
+  [not-planned list](#not-planned) below, and the record that produced it is in
+  [METHODOLOGY §which machine a number applies to](docs/METHODOLOGY.md#which-machine-a-number-applies-to).
+  `resweep.yml`'s header carries the same reasoning for the rotation.
 
 Use the command above rather than a hand-written `docker run` probe. The harness caps every
 launch, and `measureServer` force-removes every container it created in its `finally` block
@@ -208,9 +206,9 @@ neighbour. The check's line for a launched entry ends with the seconds it took �
 `<name> (added): N tokens / M tools (measured, Ss)` — and that is the whole launch as the check
 saw it, on a runner with no package cache (`summarise` in `src/sweep/pr-check.ts`). The local
 line prints no duration, and a measurement's `timeoutMs` is the budget it ran under, not the
-time it took. Write the measured figure in a comment beside the field, the way `agent-device`
-does — "Cold install measured at 142s uncontended" beside `timeoutSeconds: 420`, the budget
-the changelog says came from a measured install rather than a guess.
+time it took. Write the measured figure in a comment beside the field, the way `agent-device` does in
+`servers.yaml` — its comment records the measured cold install the budget came from, rather
+than a guess.
 
 The other `timeoutSeconds` values in the file are not a precedent to copy: `agent-device`'s is
 the one that carries a recorded basis, and the rest have no comment saying how they were
@@ -246,10 +244,9 @@ seconds with a message that names the cause. `hevy`'s honest placeholder was the
 `dummy` got past a presence check and died with a message that named nothing.
 
 A server that needs a real credential to list its tools is published as `auth-required`.
-That is a finding, not a defect in the entry: the taxonomy in
-[METHODOLOGY](docs/METHODOLOGY.md#failure-taxonomy--no-silent-drops) reads it as "won't start
-or list tools without real credentials", and the second slice of the long-tail block in
-`servers.yaml` was added expecting exactly that status — findings, not omissions.
+That is a finding, not a defect in the entry — the
+[failure taxonomy](docs/METHODOLOGY.md#failure-taxonomy--no-silent-drops) defines the status,
+and the second slice of the long-tail block in `servers.yaml` was added expecting it.
 
 A `command` that is itself a `docker run` carries its placeholders inline, because the
 harness does not wrap a command that is already a container. `github` puts
@@ -288,8 +285,10 @@ launched, as [described above](#the-launch-command-is-not-the-package-id).
 
 The exit policy, by the outcome of each launched entry (`failsCheck` in `pr-check.ts`):
 
-- **pass**: `measured`, `auth-required`, and a declared `not-applicable` — findings the
-  leaderboard publishes today.
+- **pass**: `measured`, `auth-required`, a declared `not-applicable`, and
+  `protocol-mismatch` — findings the leaderboard publishes today. The last of those means
+  the server launched and answered, and refused the protocol revision this repository pins;
+  that is our pin, not your entry, and no change to the entry would clear it.
 - **fail**: `startup-failure` and `timeout`, which mean the entry does not launch as
   written, and `dynamic`, which means two captures disagreed and there is no one number to
   show. The evidence tail is printed so you see what the server said.
@@ -334,20 +333,31 @@ workflow offers, not a promise this file makes.
 
 ## What gets in
 
-- **An entry expected to fail is still a finding.** Every candidate appears in published
-  results with exactly one status ([METHODOLOGY](docs/METHODOLOGY.md#failure-taxonomy--no-silent-drops)),
-  and the second slice of the long-tail block in `servers.yaml` was added knowing its rows
-  would record as `auth-required` or platform failures under Docker — findings, not
-  omissions.
+- **An entry expected to fail is still a finding.** The
+  [failure taxonomy](docs/METHODOLOGY.md#failure-taxonomy--no-silent-drops) says how every
+  candidate is accounted for. The long-tail block in `servers.yaml` carries a comment saying
+  which of its rows were added expecting to fail, and why that was the point.
 - **Deprecated packages stay.** The row is annotated from the `deprecated` field (version,
   source URL, the date it was read) rather than removed, so the leaderboard says what the
   registry says about the package (`gdrive`, `neon`, `elasticsearch`).
 - **Remote entries have limits.** A no-auth endpoint is measured through the `mcp-remote`
   bridge; an OAuth-walled one is listed with `remote: true` and not measured, and measuring it
-  with real credentials is on the roadmap's [not-planned list](ROADMAP.md#not-planned): the
-  isolation is credential-free by definition, and a number taken with a key would describe
-  that key's account.
+  with real credentials is on the [not-planned list](#not-planned) below, which gives the
+  reason.
 - **No metric floor is on record.** Nothing in the repository states a minimum download count,
   so this file does not invent one. What the record does state is how the long-tail block was
   chosen — ranked by live weekly downloads and provenance-checked by org and repo — which is
   the standard a reviewer holds a new entry to.
+
+## Not planned <a id="not-planned"></a>
+
+Decisions the project has taken and will not revisit in a pull request, each with its reason.
+
+- Merging per-client totals into one number: a context window belongs to one session.
+- Measuring OAuth-walled remotes (`linear`, `zapier`, `vercel`) with real credentials: the
+  isolation is credential-free by definition, and a number taken with a key would describe
+  that key's account.
+- Publishing any measurement taken on a developer machine. CI measures; the laptop probes.
+- Widening the failure taxonomy again without a corroboration rule for the new bucket.
+- Bumping methodology v1.0 for anything above: none of it touches canonical bytes,
+  `totalTokens`, or a hash.

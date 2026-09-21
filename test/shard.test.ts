@@ -1,12 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { weekIndex, shardIndexForDate, selectShard } from '../src/sweep/shard.js';
 import { MIN_REGRESSIONS } from '../src/sweep/harness-guard.js';
 import type { Measurement } from '../src/core/types.js';
 import { TSX_CLI } from './tsx.js';
+import { removeTempRoot } from './tmp.js';
 
 const day = (iso: string) => new Date(`${iso}T00:00:00Z`);
 
@@ -72,7 +73,7 @@ describe('selectShard', () => {
   it('partitions the set — every server in exactly one shard', () => {
     const all: string[] = [];
     for (let i = 0; i < 6; i++) all.push(...selectShard(items, 6, i));
-    expect(all.sort()).toEqual([...items].sort());
+    expect(all.toSorted()).toEqual(items.toSorted());
     expect(new Set(all).size).toBe(items.length);
   });
 
@@ -133,7 +134,7 @@ describe('sweep-all sharding (subprocess)', () => {
   });
 
   afterEach(() => {
-    rmSync(root, { recursive: true, force: true });
+    removeTempRoot(root);
   });
 
   function measurement(name: string, tokens: number): Measurement {
@@ -159,7 +160,10 @@ describe('sweep-all sharding (subprocess)', () => {
       join(root, 'servers.yaml'),
       'servers:\n' +
         names
-          .map((nm) => `  - name: ${nm}\n    command: node -e "process.exit(1)"\n    timeoutSeconds: 10\n`)
+          .map(
+            (nm) =>
+              `  - name: ${nm}\n    command: node -e "process.exit(1)"\n    timeoutSeconds: 10\n`,
+          )
           .join(''),
     );
     return names;
@@ -185,7 +189,7 @@ describe('sweep-all sharding (subprocess)', () => {
       .split('\n')
       .map((l) => /^ {2}(stub\d+):/.exec(l)?.[1])
       .filter((n): n is string => Boolean(n))
-      .sort(); // workers finish out of order; membership is the claim, not sequence
+      .toSorted(); // workers finish out of order; membership is the claim, not sequence
   }
 
   it('measures only its own slice, and the slices tile the whole set', () => {
@@ -198,7 +202,7 @@ describe('sweep-all sharding (subprocess)', () => {
       expect(week.length).toBe(PER_SHARD);
       seen.push(...week);
     }
-    expect(seen.sort()).toEqual([...names].sort());
+    expect(seen.toSorted()).toEqual(names.toSorted());
   }, 180_000);
 
   it('names the slice in its log before measuring it', () => {
@@ -225,9 +229,11 @@ describe('sweep-all sharding (subprocess)', () => {
 
     const { code, out } = runSweep(['--shards', String(SHARDS), '--shard-index', '0']);
     expect(code).toBe(0);
-    expect(swept(out)).toEqual([...slice].sort());
+    expect(swept(out)).toEqual(slice.toSorted());
     for (const name of outside) {
-      expect(readFileSync(join(root, 'results', name, 'measurement.json'), 'utf8')).toBe(before[name]);
+      expect(readFileSync(join(root, 'results', name, 'measurement.json'), 'utf8')).toBe(
+        before[name],
+      );
     }
     // ...and they are still on the published leaderboard and in history.
     const leaderboard = readFileSync(join(root, 'results', 'leaderboard.md'), 'utf8');
@@ -242,7 +248,7 @@ describe('sweep-all sharding (subprocess)', () => {
     expect(code).toBe(0);
     const expected = shardIndexForDate(new Date(), SHARDS);
     expect(out).toContain(`shard ${expected + 1}/${SHARDS} of ${TOTAL} sweepable:`);
-    expect(swept(out)).toEqual([...selectShard(names, SHARDS, expected)].sort());
+    expect(swept(out)).toEqual(selectShard(names, SHARDS, expected).toSorted());
   }, 120_000);
 
   it('refuses --shards together with --only rather than intersecting them', () => {

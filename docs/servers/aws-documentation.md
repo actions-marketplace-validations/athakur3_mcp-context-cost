@@ -1,6 +1,8 @@
 # aws-documentation — context cost
 
-**5,045 tokens** across 5 tools — *moderate* (5–15K). Measured 2026-09-05 under [methodology v1.0](../METHODOLOGY.html).
+**5,045 tokens** across 5 tools — *moderate* (5–15K). Measured 2026-09-09 under [methodology v1.0](../METHODOLOGY.html).
+
+An Anthropic request carries 3,380 of those tokens as tool definitions, and Claude counts those at **5,749**.
 
 | | |
 |---|---|
@@ -8,7 +10,7 @@
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `uvx awslabs.aws-documentation-mcp-server@latest` |
-| isolation | docker · ghcr.io/astral-sh/uv:python3.12-bookworm-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · ghcr.io/astral-sh/uv:python3.12-bookworm-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | none |
 | canonical SHA-256 | `096790f5b6a85d5faf9b4a09edbeddc34de23ed3c26c195bee05c42fb7f8b6a7` |
 | category | vendor-official |
@@ -16,19 +18,19 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
-|---|---:|---:|---:|---:|
-| search_documentation | 1,956 | 38.8% | 657 | 239 |
-| search_table | 1,361 | 27.0% | 658 | 172 |
-| read_sections | 634 | 12.6% | 467 | 75 |
-| read_documentation | 571 | 11.3% | 377 | 125 |
-| recommend | 521 | 10.3% | 325 | 41 |
+| tool | tokens | share | description | input schema | output schema |
+|---|---:|---:|---:|---:|---:|
+| search_documentation | 1,956 | 38.8% | 657 | 239 | 1,007 |
+| search_table | 1,361 | 27.0% | 658 | 172 | 464 |
+| read_sections | 634 | 12.6% | 467 | 75 | 29 |
+| read_documentation | 571 | 11.3% | 377 | 125 | 30 |
+| recommend | 521 | 10.3% | 325 | 41 | 120 |
 
 Each tool is tokenized on its own, so the parts do not sum exactly to the whole: the array adds its own brackets and commas, and the tokenizer merges tokens across object boundaries. The badge number is always the count of the whole array, never a sum of parts.
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -45,8 +47,9 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-16 | 5,074 | 5 | not recorded | not recorded | — |
 | 2026-08-18 | 5,074 | 5 | not recorded | docker | no change |
 | 2026-08-19 | 5,074 | 5 | not recorded | docker | no change |
-| 2026-09-04 | 5,045 | 5 | not recorded | docker | -29 |
+| 2026-09-04 | 5,045 | 5 | not recorded | docker | −29 |
 | 2026-09-05 | 5,045 | 5 | not recorded | docker | no change |
+| 2026-09-09 | 5,045 | 5 | not recorded | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

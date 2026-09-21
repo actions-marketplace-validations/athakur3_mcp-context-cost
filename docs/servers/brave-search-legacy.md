@@ -1,6 +1,8 @@
 # brave-search-legacy — context cost
 
-**319 tokens** across 2 tools — *lean* (< 1K). Measured 2026-09-05 under [methodology v1.0](../METHODOLOGY.html).
+**319 tokens** across 2 tools — *lean* (< 1K). Measured 2026-09-09 under [methodology v1.0](../METHODOLOGY.html).
+
+An Anthropic request carries 319 of those tokens as tool definitions, and Claude counts those at **800**.
 
 | | |
 |---|---|
@@ -8,7 +10,7 @@
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y @modelcontextprotocol/server-brave-search` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | BRAVE_API_KEY |
 | canonical SHA-256 | `727577fbcd5fe4e811453a32d9c9852ea877c90b8acf56e0cdf5eda15e97d803` |
 | category | official-reference |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | brave_web_search | 161 | 50.5% | 65 | 84 |
 | brave_local_search | 156 | 48.9% | 82 | 61 |
@@ -25,7 +27,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -43,6 +45,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-18 | 319 | 2 | not recorded | docker | no change |
 | 2026-09-04 | 319 | 2 | 0.1.0 | docker | no change |
 | 2026-09-05 | 319 | 2 | 0.1.0 | docker | no change |
+| 2026-09-09 | 319 | 2 | 0.1.0 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

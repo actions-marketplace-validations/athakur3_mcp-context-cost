@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -12,6 +12,7 @@ import { bridgeLaunch, probeRemotes } from '../src/audit/run.js';
 import type { ConfiguredServer, LoadedConfig } from '../src/audit/config.js';
 import { measureTools } from '../src/core/canonical.js';
 import { TSX_CLI } from './tsx.js';
+import { removeTempRoot } from './tmp.js';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 // Async, deliberately: the endpoint the CLI under test probes is served by this
@@ -24,7 +25,8 @@ const tools = JSON.parse(readFileSync(join(repoRoot, 'spec/fixtures/tools-basic.
  * public endpoints on 2026-09-06 (remote.ts), replayed here so the suite
  * reaches no network.
  */
-const WALL = 'Bearer realm="OAuth", resource_metadata="http://127.0.0.1/.well-known/oauth-protected-resource"';
+const WALL =
+  'Bearer realm="OAuth", resource_metadata="http://127.0.0.1/.well-known/oauth-protected-resource"';
 function endpoint(req: IncomingMessage, res: ServerResponse): void {
   const path = (req.url ?? '/').split('?')[0];
   const sse = () => {
@@ -36,6 +38,29 @@ function endpoint(req: IncomingMessage, res: ServerResponse): void {
     case '/walled':
       res.writeHead(401, { 'content-type': 'application/json', 'www-authenticate': WALL });
       return void res.end('{"error":"invalid_token"}');
+    // The shape 2026-07-28 requires of a server that does not support the
+    // version a request carries: HTTP 400, and the reason in the body.
+    case '/wrong-version':
+      res.writeHead(400, { 'content-type': 'application/json' });
+      return void res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          error: {
+            code: -32022,
+            message: 'Unsupported protocol version',
+            data: { supported: ['2026-07-28'], requested: '2025-06-18' },
+          },
+        }),
+      );
+    // A 400 that is not a protocol refusal — a malformed request earns one too,
+    // and reading that as the server refusing our revision would be a claim
+    // about the server made from a fact about us.
+    case '/bad-request':
+      res.writeHead(400, { 'content-type': 'application/json' });
+      return void res.end(
+        '{"jsonrpc":"2.0","id":1,"error":{"code":-32600,"message":"Invalid Request"}}',
+      );
     case '/forbidden':
       res.writeHead(403, { 'content-type': 'text/plain' });
       return void res.end('no');
@@ -123,6 +148,24 @@ describe('probeRemote — the endpoint answers for itself', () => {
     expect(p).toEqual({ kind: 'unreachable', status: 404, detail: 'HTTP 404' });
   });
 
+  /**
+   * The endpoint answered. Calling it `unreachable` — this file's word for "no
+   * MCP answer arrived" — would be a claim about someone else's server made
+   * from a fact about this harness's pin.
+   */
+  it('reads a refused protocol version as the refusal it is, not as silence', async () => {
+    const p = await probeRemote(`${base}/wrong-version`);
+    expect(p.kind).toBe('protocol-mismatch');
+    expect(p.status).toBe(400);
+    expect(p.detail).toContain('2026-07-28');
+    expect(p.detail).toContain('2025-06-18');
+  });
+
+  it('leaves a 400 that is not a protocol refusal unreachable', async () => {
+    const p = await probeRemote(`${base}/bad-request`);
+    expect(p).toEqual({ kind: 'unreachable', status: 400, detail: 'HTTP 400' });
+  });
+
   it('reports a refused connection by its code', async () => {
     const closed = createServer(() => {});
     const port = await new Promise<number>((resolve) => {
@@ -144,12 +187,18 @@ describe('probeRemote — the endpoint answers for itself', () => {
 
   it('sends the headers an entry carries, so a static token opens what it opens', async () => {
     expect((await probeRemote(`${base}/echo-auth`)).kind).toBe('auth-walled');
-    const withToken = await probeRemote(`${base}/echo-auth`, { headers: { Authorization: 'Bearer sekrit-token-value' } });
+    const withToken = await probeRemote(`${base}/echo-auth`, {
+      headers: { Authorization: 'Bearer sekrit-token-value' },
+    });
     expect(withToken.kind).toBe('open');
   });
 });
 
-const remote = (name: string, url: string, extra: Partial<ConfiguredServer> = {}): ConfiguredServer => ({
+const remote = (
+  name: string,
+  url: string,
+  extra: Partial<ConfiguredServer> = {},
+): ConfiguredServer => ({
   name,
   client: 'cursor',
   source: '/cfg.json',
@@ -162,14 +211,18 @@ const remote = (name: string, url: string, extra: Partial<ConfiguredServer> = {}
 describe('probeRemotes — once per endpoint, keyed like the measurements', () => {
   it('probes each distinct url once and keys the answer by serverKey', async () => {
     const a = remote('a', `${base}/walled`);
-    const twin = { ...remote('twin', `${base}/walled`), client: 'claude-code', source: '/other.json' };
+    const twin = {
+      ...remote('twin', `${base}/walled`),
+      client: 'claude-code',
+      source: '/other.json',
+    };
     const b = remote('b', `${base}/open`);
     const configs: LoadedConfig[] = [
       { client: 'cursor', source: '/cfg.json', servers: [a, b] },
       { client: 'claude-code', source: '/other.json', servers: [twin] },
     ];
     const probes = await probeRemotes(configs);
-    expect([...probes.keys()].sort()).toEqual([serverKey(a), serverKey(b)].sort());
+    expect([...probes.keys()].toSorted()).toEqual([serverKey(a), serverKey(b)].toSorted());
     expect(probes.get(serverKey(a))?.kind).toBe('auth-walled');
     expect(probes.get(serverKey(b))?.kind).toBe('open');
   });
@@ -177,7 +230,12 @@ describe('probeRemotes — once per endpoint, keyed like the measurements', () =
 
 describe('bridgeLaunch — what an open endpoint is measured through', () => {
   it('is the mcp-remote bridge, allowing plain http only when the url is http', () => {
-    expect(bridgeLaunch(remote('x', 'https://mcp.example/mcp')).argv).toEqual(['npx', '-y', 'mcp-remote', 'https://mcp.example/mcp']);
+    expect(bridgeLaunch(remote('x', 'https://mcp.example/mcp')).argv).toEqual([
+      'npx',
+      '-y',
+      'mcp-remote',
+      'https://mcp.example/mcp',
+    ]);
     expect(bridgeLaunch(remote('x', 'http://127.0.0.1:3001/mcp')).argv).toEqual([
       'npx',
       '-y',
@@ -188,25 +246,93 @@ describe('bridgeLaunch — what an open endpoint is measured through', () => {
   });
 
   it('carries header values in argv and in the shell line, and names only in the display form', () => {
-    const l = bridgeLaunch(remote('x', 'https://mcp.example/mcp', { headerNames: ['Authorization'], headers: { Authorization: "Bearer it's-secret" } }));
-    expect(l.argv).toEqual(['npx', '-y', 'mcp-remote', 'https://mcp.example/mcp', '--header', "Authorization: Bearer it's-secret"]);
-    expect(l.command).toBe(`npx -y mcp-remote https://mcp.example/mcp --header 'Authorization: Bearer it'\\''s-secret'`);
+    const l = bridgeLaunch(
+      remote('x', 'https://mcp.example/mcp', {
+        headerNames: ['Authorization'],
+        headers: { Authorization: "Bearer it's-secret" },
+      }),
+    );
+    expect(l.argv).toEqual([
+      'npx',
+      '-y',
+      'mcp-remote',
+      'https://mcp.example/mcp',
+      '--header',
+      "Authorization: Bearer it's-secret",
+    ]);
+    expect(l.command).toBe(
+      `npx -y mcp-remote https://mcp.example/mcp --header 'Authorization: Bearer it'\\''s-secret'`,
+    );
     expect(l.display).toBe('npx -y mcp-remote https://mcp.example/mcp --header Authorization');
     expect(l.display).not.toContain('secret');
   });
 });
 
 describe('buildReport — a remote entry is what its endpoint said', () => {
-  const cfg = (servers: ConfiguredServer[]): LoadedConfig[] => [{ client: 'cursor', source: '/cfg.json', servers }];
+  const cfg = (servers: ConfiguredServer[]): LoadedConfig[] => [
+    { client: 'cursor', source: '/cfg.json', servers },
+  ];
   const measurement = (name: string) => measureTools(tools, { serverName: name });
 
-  it('reports a walled endpoint as auth-walled, in the server\'s own words, with the url', () => {
+  /**
+   * The row a reader actually sees. `unreachable` is defined a few lines up in
+   * remote.ts as "no MCP answer arrived"; printing it here about an endpoint
+   * that answered is the same category error the sweep's `startup-failure` used
+   * to make about a server that had started.
+   */
+  it("reports a refused revision as this harness's pin, not as the endpoint failing", () => {
+    const v = remote('vercel', 'https://mcp.vercel.com');
+    const remotes = new Map([
+      [
+        serverKey(v),
+        {
+          kind: 'protocol-mismatch' as const,
+          status: 400,
+          detail: 'HTTP 400 refusing protocol version 2025-06-18 — it speaks 2026-07-28',
+        },
+      ],
+    ]);
+    const r = buildReport(cfg([v]), new Map(), { generatedAt: 'T', remotes });
+    const row = r.configs[0].skipped[0];
+    expect(row).toMatchObject({
+      name: 'vercel',
+      transport: 'remote',
+      status: 'protocol-mismatch',
+      tokens: null,
+    });
+    expect(row.notes).toContain('it speaks 2026-07-28');
+    expect(row.notes).toContain('this audit speaks a revision it does not');
+    expect(row.notes).not.toContain('unreachable');
+    // It still counts against the budget: a server whose cost could not be
+    // established is not a server that costs nothing.
+    expect(r.configs[0].totalTokens).toBe(0);
+  });
+
+  it("reports a walled endpoint as auth-walled, in the server's own words, with the url", () => {
     const linear = remote('linear', 'https://mcp.linear.app/mcp');
-    const remotes = new Map([[serverKey(linear), { kind: 'auth-walled' as const, status: 401, wwwAuthenticate: WALL, detail: `HTTP 401 — WWW-Authenticate: ${WALL}` }]]);
+    const remotes = new Map([
+      [
+        serverKey(linear),
+        {
+          kind: 'auth-walled' as const,
+          status: 401,
+          wwwAuthenticate: WALL,
+          detail: `HTTP 401 — WWW-Authenticate: ${WALL}`,
+        },
+      ],
+    ]);
     const r = buildReport(cfg([linear]), new Map(), { generatedAt: 'T', remotes });
     const row = r.configs[0].skipped[0];
-    expect(row).toMatchObject({ name: 'linear', transport: 'remote', status: 'auth-walled', url: 'https://mcp.linear.app/mcp', tokens: null });
-    expect(row.notes).toContain('https://mcp.linear.app/mcp answered HTTP 401 — WWW-Authenticate: Bearer realm="OAuth"');
+    expect(row).toMatchObject({
+      name: 'linear',
+      transport: 'remote',
+      status: 'auth-walled',
+      url: 'https://mcp.linear.app/mcp',
+      tokens: null,
+    });
+    expect(row.notes).toContain(
+      'https://mcp.linear.app/mcp answered HTTP 401 — WWW-Authenticate: Bearer realm="OAuth"',
+    );
     expect(row.notes).toContain('credential this audit does not hold');
     expect(r.configs[0].totalTokens).toBe(0);
     expect(formatReport(r)).toContain('auth-walled');
@@ -214,29 +340,52 @@ describe('buildReport — a remote entry is what its endpoint said', () => {
 
   it('reports an endpoint that gave no MCP answer as unreachable, with the reason', () => {
     const gone = remote('gone', 'https://mcp.example/sse');
-    const remotes = new Map([[serverKey(gone), { kind: 'unreachable' as const, detail: 'ENOTFOUND' }]]);
+    const remotes = new Map([
+      [serverKey(gone), { kind: 'unreachable' as const, detail: 'ENOTFOUND' }],
+    ]);
     const r = buildReport(cfg([gone]), new Map(), { generatedAt: 'T', remotes });
-    expect(r.configs[0].skipped[0]).toMatchObject({ status: 'unreachable', notes: 'https://mcp.example/sse: ENOTFOUND' });
+    expect(r.configs[0].skipped[0]).toMatchObject({
+      status: 'unreachable',
+      notes: 'https://mcp.example/sse: ENOTFOUND',
+    });
   });
 
   it('counts an open endpoint measured through the bridge in the total, as a remote', () => {
     const wiki = remote('wiki', 'https://mcp.deepwiki.com/mcp');
-    const remotes = new Map([[serverKey(wiki), { kind: 'open' as const, status: 200, detail: 'HTTP 200 text/event-stream' }]]);
+    const remotes = new Map([
+      [
+        serverKey(wiki),
+        { kind: 'open' as const, status: 200, detail: 'HTTP 200 text/event-stream' },
+      ],
+    ]);
     const measured = new Map([[serverKey(wiki), measurement('wiki')]]);
     const r = buildReport(cfg([wiki]), measured, { generatedAt: 'T', remotes });
     expect(r.configs[0].skipped).toEqual([]);
-    expect(r.configs[0].servers[0]).toMatchObject({ name: 'wiki', transport: 'remote', status: 'measured', url: 'https://mcp.deepwiki.com/mcp' });
+    expect(r.configs[0].servers[0]).toMatchObject({
+      name: 'wiki',
+      transport: 'remote',
+      status: 'measured',
+      url: 'https://mcp.deepwiki.com/mcp',
+    });
     expect(r.configs[0].totalTokens).toBe(measurement('wiki').totalTokens);
   });
 
   it('says a remote it was given no probe for was not probed, rather than anything about the endpoint', () => {
     const r = buildReport(cfg([remote('r', 'https://x/mcp')]), new Map(), { generatedAt: 'T' });
-    expect(r.configs[0].skipped[0]).toMatchObject({ status: 'unreachable', notes: 'https://x/mcp — not probed' });
+    expect(r.configs[0].skipped[0]).toMatchObject({
+      status: 'unreachable',
+      notes: 'https://x/mcp — not probed',
+    });
   });
 
   it('never carries a header value into a report, only the name, and never the retired status word', () => {
-    const r1 = remote('r', `${base}/echo-auth`, { headerNames: ['Authorization'], headers: { Authorization: 'Bearer sekrit-token-value' } });
-    const remotes = new Map([[serverKey(r1), { kind: 'auth-walled' as const, status: 401, detail: 'HTTP 401' }]]);
+    const r1 = remote('r', `${base}/echo-auth`, {
+      headerNames: ['Authorization'],
+      headers: { Authorization: 'Bearer sekrit-token-value' },
+    });
+    const remotes = new Map([
+      [serverKey(r1), { kind: 'auth-walled' as const, status: 401, detail: 'HTTP 401' }],
+    ]);
     const r = buildReport(cfg([r1]), new Map(), { generatedAt: 'T', remotes });
     const text = JSON.stringify(r) + formatReport(r);
     expect(r.configs[0].skipped[0].headerNames).toEqual(['Authorization']);
@@ -255,29 +404,60 @@ describe('buildReport — a remote entry is what its endpoint said', () => {
       envVarNames: ['API_KEY'],
       env: { API_KEY: 'sekrit-token-value' },
     };
-    const failed = { ...measurement('leaky'), status: 'startup-failure' as const, totalTokens: null, notes: 'exit 1: bad key sekrit-token-value rejected' };
+    const failed = {
+      ...measurement('leaky'),
+      status: 'startup-failure' as const,
+      totalTokens: null,
+      notes: 'exit 1: bad key sekrit-token-value rejected',
+    };
     const r = buildReport(cfg([s]), new Map([[serverKey(s), failed]]), { generatedAt: 'T' });
     expect(r.configs[0].skipped[0].notes).toBe('exit 1: bad key <redacted> rejected');
   });
 });
 
 describe('audit CLI — a config with an http entry', () => {
+  const tmpDirs: string[] = [];
+  afterEach(() => {
+    // The audit CLI ran with cwd inside this root — exactly the late-writer
+    // race removeTempRoot exists for.
+    for (const dir of tmpDirs.splice(0)) removeTempRoot(dir);
+  });
+
   it('prints an auth-walled line for a walled endpoint, never remote-not-measurable, and opens no browser', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'mcp-audit-remote-'));
+    tmpDirs.push(dir);
     writeFileSync(
       join(dir, 'mcp.json'),
-      JSON.stringify({ mcpServers: { linear: { type: 'http', url: `${base}/walled` }, gone: { type: 'sse', url: `${base}/gone` } } }),
+      JSON.stringify({
+        mcpServers: {
+          linear: { type: 'http', url: `${base}/walled` },
+          gone: { type: 'sse', url: `${base}/gone` },
+        },
+      }),
     );
     const run = async (...flags: string[]) =>
       (
-        await execFileAsync(process.execPath, [TSX_CLI, join(repoRoot, 'src/cli.ts'), 'audit', '--config', join(dir, 'mcp.json'), ...flags], {
-          cwd: dir,
-          encoding: 'utf8',
-          timeout: 60_000,
-        })
+        await execFileAsync(
+          process.execPath,
+          [
+            TSX_CLI,
+            join(repoRoot, 'src/cli.ts'),
+            'audit',
+            '--config',
+            join(dir, 'mcp.json'),
+            ...flags,
+          ],
+          {
+            cwd: dir,
+            encoding: 'utf8',
+            timeout: 60_000,
+          },
+        )
       ).stdout;
     const report = JSON.parse(await run('--json'));
-    const byName = Object.fromEntries(report.configs[0].skipped.map((s: { name: string }) => [s.name, s]));
+    const byName = Object.fromEntries(
+      report.configs[0].skipped.map((s: { name: string }) => [s.name, s]),
+    );
     expect(byName.linear).toMatchObject({ status: 'auth-walled', url: `${base}/walled` });
     expect(byName.linear.notes).toContain('WWW-Authenticate');
     expect(byName.gone).toMatchObject({ status: 'unreachable', notes: `${base}/gone: HTTP 404` });
@@ -285,6 +465,6 @@ describe('audit CLI — a config with an http entry', () => {
     const text = await run();
     expect(text).toContain('auth-walled');
     expect(text).not.toContain('remote-not-measurable');
-    expect(readdirSync(dir).sort()).toEqual(['mcp.json']);
+    expect(readdirSync(dir).toSorted()).toEqual(['mcp.json']);
   }, 90_000);
 });

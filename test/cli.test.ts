@@ -1,15 +1,17 @@
 import { describe, it, expect, afterAll } from 'vitest';
 import { execFileSync, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:http';
-import { verifyMeasurement, slugFromUrl, unknownFlags, cliVersion } from '../src/cli.js';
+import { verifyMeasurement, slugFromUrl, cliVersion } from '../src/cli.js';
+import { unknownFlags } from '../src/flags.js';
 import { measureTools } from '../src/core/canonical.js';
 import type { Measurement } from '../src/core/types.js';
 import { TSX_CLI } from './tsx.js';
+import { removeTempRoot } from './tmp.js';
 
 const execFileAsync = promisify(execFile);
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -47,7 +49,7 @@ describe('verify command (dispute drill)', () => {
 
 describe('verify --json (CLI process)', () => {
   const dir = mkdtempSync(join(tmpdir(), 'mcp-context-cost-cli-'));
-  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  afterAll(() => removeTempRoot(dir));
 
   it('prints a single JSON object and exits 0 on success', () => {
     const m = measureTools(tools, { serverName: 'x' });
@@ -70,7 +72,10 @@ describe('verify --json (CLI process)', () => {
     let out = '';
     let code = 0;
     try {
-      execFileSync(process.execPath, [TSX_CLI, 'src/cli.ts', 'verify', path, '--json'], { cwd: repoRoot, encoding: 'utf8' });
+      execFileSync(process.execPath, [TSX_CLI, 'src/cli.ts', 'verify', path, '--json'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      });
     } catch (e) {
       const err = e as { status: number; stdout: string };
       code = err.status;
@@ -86,7 +91,10 @@ describe('verify --json (CLI process)', () => {
   it('exits 2 on usage error', () => {
     let code = 0;
     try {
-      execFileSync(process.execPath, [TSX_CLI, 'src/cli.ts', 'verify'], { cwd: repoRoot, encoding: 'utf8' });
+      execFileSync(process.execPath, [TSX_CLI, 'src/cli.ts', 'verify'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      });
     } catch (e) {
       code = (e as { status: number }).status;
     }
@@ -126,7 +134,10 @@ describe('measure --remote (usage validation, no network)', () => {
   it('exits 2 when neither --command nor --remote is given', () => {
     let code = 0;
     try {
-      execFileSync(process.execPath, [TSX_CLI, 'src/cli.ts', 'measure', '--name', 'x'], { cwd: repoRoot, encoding: 'utf8' });
+      execFileSync(process.execPath, [TSX_CLI, 'src/cli.ts', 'measure', '--name', 'x'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      });
     } catch (e) {
       code = (e as { status: number }).status;
     }
@@ -161,10 +172,14 @@ describe('verify --remote', () => {
     await ready;
     // execFileSync would block this process's event loop while the child's fetch
     // tries to reach the server that lives in this same process — deadlock.
-    const { stdout } = await execFileAsync(process.execPath, [TSX_CLI, 'src/cli.ts', 'verify', '--remote', `${base}/ok.json`, '--json'], {
-      cwd: repoRoot,
-      encoding: 'utf8',
-    });
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      [TSX_CLI, 'src/cli.ts', 'verify', '--remote', `${base}/ok.json`, '--json'],
+      {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      },
+    );
     const parsed = JSON.parse(stdout);
     expect(parsed).toMatchObject({ ok: true, serverName: 'x', problems: [] });
     expect(parsed.badge).toBeDefined();
@@ -175,10 +190,14 @@ describe('verify --remote', () => {
     let out = '';
     let code = 0;
     try {
-      await execFileAsync(process.execPath, [TSX_CLI, 'src/cli.ts', 'verify', '--remote', `${base}/missing.json`, '--json'], {
-        cwd: repoRoot,
-        encoding: 'utf8',
-      });
+      await execFileAsync(
+        process.execPath,
+        [TSX_CLI, 'src/cli.ts', 'verify', '--remote', `${base}/missing.json`, '--json'],
+        {
+          cwd: repoRoot,
+          encoding: 'utf8',
+        },
+      );
     } catch (e) {
       const err = e as { code: number; stdout: string };
       code = err.code;
@@ -191,7 +210,6 @@ describe('verify --remote', () => {
   });
 });
 
-
 // ---------------------------------------------------------------------------
 // Unknown flags must fail loud. Regression for a real silent-pass defect:
 // `audit --baseline b.json --max-increase 2000` on a build without those flags
@@ -200,13 +218,39 @@ describe('verify --remote', () => {
 
 describe('unknownFlags', () => {
   const AUDIT = {
-    value: ['config', 'budget', 'baseline', 'max-increase', 'context', 'timeout', 'concurrency', 'divergence-url'],
+    value: [
+      'config',
+      'budget',
+      'baseline',
+      'max-increase',
+      'context',
+      'timeout',
+      'concurrency',
+      'divergence-url',
+    ],
     boolean: ['json', 'docker', 'claude'],
   };
 
   it('accepts every flag the audit command actually supports', () => {
-    const argv = ['--config', 'a.json', '--budget', '20000', '--baseline', 'b.json', '--max-increase', '2000',
-                  '--context', '200000', '--timeout', '60000', '--concurrency', '3', '--docker', '--claude', '--json'];
+    const argv = [
+      '--config',
+      'a.json',
+      '--budget',
+      '20000',
+      '--baseline',
+      'b.json',
+      '--max-increase',
+      '2000',
+      '--context',
+      '200000',
+      '--timeout',
+      '60000',
+      '--concurrency',
+      '3',
+      '--docker',
+      '--claude',
+      '--json',
+    ];
     expect(unknownFlags(argv, AUDIT)).toEqual([]);
   });
 
@@ -215,9 +259,12 @@ describe('unknownFlags', () => {
     expect(unknownFlags(['--nope', '--also-nope'], AUDIT)).toEqual(['--nope', '--also-nope']);
   });
 
-  it('does not read a value-taking flag\'s value as a flag', () => {
+  it("does not read a value-taking flag's value as a flag", () => {
     // `measure --command "npx -y foo --bar"` is one argv element and must stay a value.
-    const MEASURE = { value: ['name', 'command', 'remote', 'timeout', 'docker-image'], boolean: ['docker'] };
+    const MEASURE = {
+      value: ['name', 'command', 'remote', 'timeout', 'docker-image'],
+      boolean: ['docker'],
+    };
     expect(unknownFlags(['--command', '--weird-looking-value', '--docker'], MEASURE)).toEqual([]);
     expect(unknownFlags(['--command', 'npx -y foo --bar'], MEASURE)).toEqual([]);
   });
@@ -235,7 +282,11 @@ describe('unknownFlags', () => {
 describe('CLI rejects unknown flags', () => {
   const run = (args: string[]) => {
     try {
-      execFileSync(process.execPath, [TSX_CLI, 'src/cli.ts', ...args], { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+      execFileSync(process.execPath, [TSX_CLI, 'src/cli.ts', ...args], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
       return { code: 0, stderr: '' };
     } catch (e) {
       const err = e as { status: number; stderr: string };
@@ -258,7 +309,6 @@ describe('CLI rejects unknown flags', () => {
   }, 60_000);
 });
 
-
 // ---------------------------------------------------------------------------
 // Two different machines used to get one sentence: one with a client installed
 // that declares no servers, and one with no client anywhere. The first was told
@@ -267,11 +317,15 @@ describe('CLI rejects unknown flags', () => {
 
 describe('audit tells an empty client apart from no client at all', () => {
   const dir = mkdtempSync(join(tmpdir(), 'mcp-context-cost-empty-'));
-  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  afterAll(() => removeTempRoot(dir));
 
   const run = (args: string[]) => {
     try {
-      execFileSync(process.execPath, [TSX_CLI, 'src/cli.ts', ...args], { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+      execFileSync(process.execPath, [TSX_CLI, 'src/cli.ts', ...args], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
       return { code: 0, stderr: '', stdout: '' };
     } catch (e) {
       const err = e as { status: number; stderr: string; stdout: string };
@@ -308,7 +362,9 @@ describe('audit tells an empty client apart from no client at all', () => {
     expect(r.stderr).not.toContain('declares no servers');
     expect(r.stderr).not.toContain('nothing declared to measure');
     expect(r.stderr).toContain('an MCP client config was found, and it has no server to measure');
-    expect(r.stderr).toContain('declares 2 servers, and every one of them is switched off: linear, redis');
+    expect(r.stderr).toContain(
+      'declares 2 servers, and every one of them is switched off: linear, redis',
+    );
     expect(r.stderr).toContain(path);
   }, 60_000);
 
@@ -317,8 +373,12 @@ describe('audit tells an empty client apart from no client at all', () => {
     writeFileSync(path, '{"mcpServers":{"redis":{"command":"node","disabled":true}}}');
     const r = run(['audit', '--config', path, '--json']);
     expect(r.code).toBe(1);
-    const report = JSON.parse(r.stdout) as { emptyConfigs: { source: string; allDisabled?: string[] }[] };
-    expect(report.emptyConfigs).toEqual([{ client: 'explicit', source: path, allDisabled: ['redis'] }]);
+    const report = JSON.parse(r.stdout) as {
+      emptyConfigs: { source: string; allDisabled?: string[] }[];
+    };
+    expect(report.emptyConfigs).toEqual([
+      { client: 'explicit', source: path, allDisabled: ['redis'] },
+    ]);
   }, 60_000);
 
   it('names the empty config in --json too, where it is a field and not prose', () => {
@@ -326,7 +386,10 @@ describe('audit tells an empty client apart from no client at all', () => {
     writeFileSync(path, '{"otherKey":1}');
     const r = run(['audit', '--config', path, '--json']);
     expect(r.code).toBe(1);
-    const report = JSON.parse(r.stdout) as { configs: unknown[]; emptyConfigs: { source: string }[] };
+    const report = JSON.parse(r.stdout) as {
+      configs: unknown[];
+      emptyConfigs: { source: string }[];
+    };
     expect(report.configs).toHaveLength(0);
     expect(report.emptyConfigs.map((c) => c.source)).toEqual([path]);
   }, 60_000);

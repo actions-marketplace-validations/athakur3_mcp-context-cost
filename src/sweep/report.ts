@@ -5,18 +5,27 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Measurement } from '../core/types.js';
-import { isCurrent, parseDivergence, type DivergenceRun } from '../core/divergence.js';
-import { divergencePct, isComparable, parseCrossCheck, type CrossCheckRun } from '../core/cross-check.js';
+import {
+  isCurrent,
+  mappedTokens,
+  parseDivergence,
+  type DivergenceRun,
+} from '../core/divergence.js';
+import {
+  divergencePct,
+  isComparable,
+  parseCrossCheck,
+  type CrossCheckRun,
+} from '../core/cross-check.js';
 // Type-only, and from core rather than ./regressions.js: the regression report
 // imports this module for its markdown escaping, so importing it back at
 // runtime would close a cycle. The summary is handed in by the caller instead.
 import type { RegressionSummary } from '../core/regression.js';
+import { signed, signedPctToPrecision } from '../core/format.js';
 import {
   SESSION_START_METHOD,
-  parseSessionStart,
   sessionStartLoad,
   type SessionStartLoad,
-  type SessionStartRun,
 } from '../core/session-start.js';
 
 export interface ServerEntry {
@@ -73,6 +82,41 @@ export interface ServerEntry {
    * context cost nobody is watching.
    */
   deprecated?: Deprecation;
+  /**
+   * A different project of the same name that this row does **not** measure.
+   *
+   * `name` is the only thing the leaderboard shows about an entry — the package
+   * id and the repo are on the server page, one click away — so a row whose
+   * name is shared with a better-known project reads as that project to anyone
+   * who does not click. That is not hypothetical: `octocode` here is the npm
+   * package `octocode-mcp` from `bgauryy/octocode`, and someone who works on
+   * `Muvon/octocode`, an unrelated Rust project with the same name, read the
+   * row as theirs and posted a public correction about how their server had
+   * been filed.
+   *
+   * Declared per entry rather than detected, because there is no way to detect
+   * it: two unrelated projects picking one word is a fact about the world, and
+   * the only honest source is someone noticing. Renaming the entry is the
+   * alternative and a much larger one — `name` keys `results/<name>/`,
+   * `badges/<name>.json`, the capture index and every history row, so it is a
+   * change to a published identifier rather than to a label.
+   */
+  nameCollision?: NameCollision;
+}
+
+/**
+ * The other project, as a dated reading — the same shape a deprecation takes,
+ * for the same reason: it is a claim about something outside this repository,
+ * so it carries where it was read and when. A project can be renamed, archived
+ * or absorbed without anything here moving.
+ */
+export interface NameCollision {
+  /** The other project, as its own owner writes it — e.g. `Muvon/octocode`. */
+  project: string;
+  /** Where it was read. */
+  source: string;
+  /** The day it was read. */
+  readOn: string;
 }
 
 /**
@@ -114,6 +158,12 @@ const mdLink = (url: unknown) => encodeURI(String(url ?? '')).replace(/\)/g, '%2
  * Returns '' for an entry with no deprecation, so a caller can splice it in
  * without branching.
  */
+/** `https://github.com/owner/repo` → `owner/repo`; anything else is left alone. */
+export function shortRepo(url: string): string {
+  const m = /^https?:\/\/(?:www\.)?github\.com\/([^/]+\/[^/#?]+)/.exec(url);
+  return m?.[1] ? m[1].replace(/\.git$/, '') : url;
+}
+
 export function deprecationText(entry: ServerEntry): string {
   const d = entry.deprecated;
   if (!d) return '';
@@ -150,12 +200,6 @@ export function loadDivergence(root = process.cwd()): DivergenceRun | null {
   return existsSync(p) ? parseDivergence(readFileSync(p, 'utf8')) : null;
 }
 
-/** results/session-start.json — the instructions backfill, if one exists. */
-export function loadSessionStartRun(root = process.cwd()): SessionStartRun | null {
-  const p = join(root, 'results', 'session-start.json');
-  return existsSync(p) ? parseSessionStart(readFileSync(p, 'utf8')) : null;
-}
-
 /** results/cross-check.json if a CLI cross-check run has been recorded, else null. */
 export function loadCrossCheckRun(root = process.cwd()): CrossCheckRun | null {
   const p = join(root, 'results', 'cross-check.json');
@@ -180,11 +224,9 @@ export function writeLeaderboard(
 ): void {
   const rows = loadRows(entries, root);
   const div = loadDivergence(root);
-  const ss = loadSessionStartRun(root);
   const xc = loadCrossCheckRun(root);
   /** Session-start load for a row, or null when there is no capture to read. */
-  const session = (r: Row): SessionStartLoad | null =>
-    r.m ? sessionStartLoad(r.m, ss?.servers[r.entry.name]) : null;
+  const session = (r: Row): SessionStartLoad | null => (r.m ? sessionStartLoad(r.m) : null);
   /** Claude tokens for a row, or null when not measured / stale / errored. */
   const claude = (r: Row): number | null => {
     if (!div || !r.m) return null;
@@ -197,10 +239,9 @@ export function writeLeaderboard(
     const row = xc.servers[r.entry.name];
     return isComparable(row, r.m.canonicalSha256) ? row : null;
   };
-  const signedPct = (p: number) => `${p >= 0 ? '+' : '−'}${Math.abs(p).toFixed(1)}%`;
   const measured = rows
     .filter((r) => r.m && (r.m.status === 'measured' || r.m.status === 'dynamic'))
-    .sort((a, b) => (b.m!.totalTokens ?? 0) - (a.m!.totalTokens ?? 0));
+    .toSorted((a, b) => (b.m!.totalTokens ?? 0) - (a.m!.totalTokens ?? 0));
   const unmeasured = rows.filter((r) => !measured.includes(r));
 
   const md: string[] = [];
@@ -240,7 +281,7 @@ export function writeLeaderboard(
         `percentage is the disagreement of counters: the CLI's count against ours of the same three-field ` +
         `projection` +
         (pcts.length > 0
-          ? `, ${signedPct(Math.min(...pcts))} to ${signedPct(Math.max(...pcts))} across the ` +
+          ? `, ${signedPctToPrecision(Math.min(...pcts))} to ${signedPctToPrecision(Math.max(...pcts))} across the ` +
             `${pcts.length} row${pcts.length === 1 ? '' : 's'} where both tools saw the same tool set.`
           : `. No row currently compares like with like.`) +
         ` A row prints only while the comparison is between like and like: the same tool names on both ` +
@@ -254,10 +295,9 @@ export function writeLeaderboard(
   // deferral-costs-more note follows, rather than asserting a stale count.
   if (regressions && regressions.changes.length > 0) {
     const net = regressions.netTokens;
-    const sign = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toLocaleString('en-US')}`;
     md.push(
       `**Of the servers whose cost has moved at all, ${regressions.grew} moved upward and ` +
-        `${regressions.shrank} moved down** — a net ${sign(net)} tokens across the set. Most entries here ` +
+        `${regressions.shrank} moved down** — a net ${signed(net)} tokens across the set. Most entries here ` +
         `launch unpinned, so a movement is a real upstream release landing in real context windows, and ` +
         `only measurements taken under the same isolation are compared. Every movement, which half of the ` +
         `server moved, and where the tokens went: [regressions.md](regressions.md).`,
@@ -316,19 +356,28 @@ export function writeLeaderboard(
     );
     md.push('');
   }
+  // `mapped` is unconditional where `claude` is gated on `div`, and the
+  // difference is not an oversight: the Claude column needs a run this
+  // repository may not have, while `mapped` is recomputed from the capture
+  // beside it in this same file — no key, no run, and no way for it to be
+  // stale against the bytes it describes.
   md.push(
-    `| # | server | tokens | session start |${div ? ' claude |' : ''}${xc ? ' mcp-tokens |' : ''} tools | largest tool | status | category |`,
+    `| # | server | tokens | mapped | session start |${div ? ' claude |' : ''}${xc ? ' mcp-tokens |' : ''} tools | largest tool | status | category |`,
   );
-  md.push(`|---:|---|---:|---:|${div ? '---:|' : ''}${xc ? '---:|' : ''}---:|---|---|---|`);
+  md.push(`|---:|---|---:|---:|---:|${div ? '---:|' : ''}${xc ? '---:|' : ''}---:|---|---|---|`);
   measured.forEach((r, i) => {
     const m = r.m!;
-    const largest = [...m.tools].sort((a, b) => b.tokens - a.tokens)[0];
+    const largest = m.tools.toSorted((a, b) => b.tokens - a.tokens)[0];
     const link = `[${mdCell(r.entry.name)}](../docs/servers/${encodeURIComponent(r.entry.name)}.md)`;
     const c = claude(r);
     const x = crossCheck(r);
-    const xCell = x === null ? '—' : `${x.cliTokens.toLocaleString('en-US')} (${signedPct(divergencePct(x)!)})`;
+    const xCell =
+      x === null
+        ? '—'
+        : `${x.cliTokens.toLocaleString('en-US')} (${signedPctToPrecision(divergencePct(x)!)})`;
     md.push(
       `| ${i + 1} | ${link} | ${m.totalTokens!.toLocaleString('en-US')} |` +
+        ` ${mappedTokens(m.rawToolsCapture ?? []).toLocaleString('en-US')} |` +
         ` ${sessionStartCell(session(r))} |` +
         (div ? ` ${c === null ? '—' : c.toLocaleString('en-US')} |` : '') +
         (xc ? ` ${xCell} |` : '') +
@@ -360,6 +409,35 @@ export function writeLeaderboard(
     for (const r of deprecated) {
       const status = r.entry.remote ? 'remote-auth-wall' : (r.m?.status ?? 'not-yet-run');
       md.push(`| ${mdCell(r.entry.name)} | ${status} | ${deprecationText(r.entry)} |`);
+    }
+    md.push('');
+  }
+  // Same rule as the deprecation section above: derived, and gone when no entry
+  // declares one. It is a section rather than a column because the fact belongs
+  // to a handful of rows and a column would put an empty cell on the other
+  // hundred — and because what a reader needs here is a sentence, not a cell.
+  const collided = rows.filter((r) => r.entry.nameCollision);
+  if (collided.length > 0) {
+    md.push('## Same name, different project');
+    md.push('');
+    md.push(
+      `A row here is named for the package it launches, and ${collided.length === 1 ? 'one name is' : 'these names are'} ` +
+        `shared with an unrelated project. The table above shows only the name, so ` +
+        `${collided.length === 1 ? 'that row' : 'those rows'} can be read as the wrong software by anyone who does not ` +
+        `open the page — which has already happened once, publicly. What each row actually measures is its launch ` +
+        `command and its source repository, both on its detail page.`,
+    );
+    md.push('');
+    md.push('| server | measures | not to be confused with |');
+    md.push('|---|---|---|');
+    for (const r of collided) {
+      const c = r.entry.nameCollision!;
+      const measures = r.entry.repo
+        ? `\`${mdCell(r.entry.package ?? r.entry.command)}\` — [${mdCell(shortRepo(r.entry.repo))}](${mdLink(r.entry.repo)})`
+        : `\`${mdCell(r.entry.package ?? r.entry.command)}\``;
+      md.push(
+        `| ${mdCell(r.entry.name)} | ${measures} | [${mdCell(c.project)}](${mdLink(c.source)}), read ${mdCell(c.readOn)} |`,
+      );
     }
     md.push('');
   }
@@ -416,16 +494,4 @@ export function writeLeaderboard(
     );
   }
   writeFileSync(join(root, 'results', 'leaderboard.csv'), csv.join('\n') + '\n');
-}
-
-/** Percentile helper for freezing color bands against the observed distribution. */
-export function percentiles(entries: ServerEntry[], root = process.cwd()): Record<string, number> {
-  const totals = loadRows(entries, root)
-    .map((r) => r.m?.totalTokens)
-    .filter((t): t is number => typeof t === 'number')
-    .sort((a, b) => a - b);
-  // Nearest-rank percentile: ceil(p/100 * n) as 1-based rank (unbiased at exact multiples).
-  const at = (p: number) =>
-    totals[Math.min(totals.length - 1, Math.max(0, Math.ceil((p / 100) * totals.length) - 1))] ?? 0;
-  return { p25: at(25), p50: at(50), p75: at(75), p90: at(90), n: totals.length };
 }

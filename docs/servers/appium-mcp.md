@@ -2,13 +2,15 @@
 
 **10,267 tokens** across 31 tools — *moderate* (5–15K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
 
+An Anthropic request carries 9,798 of those tokens as tool definitions, and Claude counts those at **17,001**.
+
 | | |
 |---|---|
 | server (self-reported) | MCP Appium v1.92.13 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y appium-mcp` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · architecture not on record · network enabled for package fetch; clean FS, no host credent |
 | env vars supplied | none |
 | canonical SHA-256 | `d024ca5b97d52d5442da395ed92d1d107b6728db57cf1295bb87c5d3624c0e53` |
 | category | vendor-official |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | appium_gesture | 1,308 | 12.7% | 94 | 1,188 |
 | appium_session_management | 971 | 9.5% | 48 | 891 |
@@ -55,7 +57,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|

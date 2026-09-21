@@ -11,7 +11,10 @@ import { buildToolShapeBaseline, type ToolShapeBaseline } from '../core/tool-sha
 import { loadRows, type ServerEntry } from './report.js';
 import type { ToolMeasurement } from '../core/types.js';
 
-export function writeToolShapeBaseline(entries: ServerEntry[], root = process.cwd()): ToolShapeBaseline {
+export function writeToolShapeBaseline(
+  entries: ServerEntry[],
+  root = process.cwd(),
+): ToolShapeBaseline {
   const tools: ToolMeasurement[] = [];
   const dates: string[] = [];
   let serverCount = 0;
@@ -27,7 +30,7 @@ export function writeToolShapeBaseline(entries: ServerEntry[], root = process.cw
   // the file says how far its data reaches and a re-derivation over unchanged
   // measurements produces no diff. `buildToolShapeBaseline` still defaults to
   // today when nobody supplies one, for callers with no measurement dates.
-  const generatedAt = dates.sort().pop();
+  const generatedAt = dates.toSorted().pop();
   const baseline = buildToolShapeBaseline(tools, {
     serverCount,
     methodologyVersion: METHODOLOGY_VERSION,

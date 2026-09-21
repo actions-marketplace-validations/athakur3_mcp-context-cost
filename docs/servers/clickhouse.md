@@ -2,13 +2,15 @@
 
 **632 tokens** across 3 tools — *lean* (< 1K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
 
+An Anthropic request carries 495 of those tokens as tool definitions, and Claude counts those at **1,182**.
+
 | | |
 |---|---|
 | server (self-reported) | mcp-clickhouse v0.6.0 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `uvx mcp-clickhouse` |
-| isolation | docker · ghcr.io/astral-sh/uv:python3.12-bookworm-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · ghcr.io/astral-sh/uv:python3.12-bookworm-slim · network bridge · architecture not on record · network enabled for package fetch; clean FS, no host cred |
 | env vars supplied | CLICKHOUSE_HOST, CLICKHOUSE_USER, CLICKHOUSE_PASSWORD |
 | canonical SHA-256 | `6f42fcefaf49e720fe8ec5acf8dafc7ae6065bf541957572b6a6abbe61f111d4` |
 | category | vendor-official |
@@ -16,17 +18,17 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
-|---|---:|---:|---:|---:|
-| list_tables | 353 | 55.9% | 63 | 230 |
-| run_query | 201 | 31.8% | 121 | 24 |
-| list_databases | 78 | 12.3% | 5 | 14 |
+| tool | tokens | share | description | input schema | output schema |
+|---|---:|---:|---:|---:|---:|
+| list_tables | 353 | 55.9% | 63 | 230 | 28 |
+| run_query | 201 | 31.8% | 121 | 24 | 28 |
+| list_databases | 78 | 12.3% | 5 | 14 | 28 |
 
 Each tool is tokenized on its own, so the parts do not sum exactly to the whole: the array adds its own brackets and commas, and the tokenizer merges tokens across object boundaries. The badge number is always the count of the whole array, never a sum of parts.
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -43,7 +45,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-16 | 581 | 3 | not recorded | not recorded | — |
 | 2026-08-18 | 581 | 3 | not recorded | docker | no change |
 | 2026-09-02 | 694 | 3 | not recorded | docker | +113 |
-| 2026-09-04 | 632 | 3 | 0.6.0 | docker | -62 |
+| 2026-09-04 | 632 | 3 | 0.6.0 | docker | −62 |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

@@ -10,7 +10,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { captureTools, clampNotes } from './client.js';
+import { captureTools, clampNotes, type ClientPosture } from './client.js';
+import { PROTOCOL_VERSION } from '../core/protocol.js';
 import {
   DockerHarnessFault,
   defaultImageFor,
@@ -21,6 +22,7 @@ import {
 } from './docker.js';
 import { measureTools, failedMeasurement, canonicalString } from '../core/canonical.js';
 import { toBadge } from '../core/badge.js';
+import { flagValue, knownFlagNames, unknownFlags, valuelessFlags } from '../flags.js';
 import type { Measurement } from '../core/types.js';
 
 /**
@@ -58,12 +60,64 @@ import type { Measurement } from '../core/types.js';
 export const AUTH_EVIDENCE =
   /(?<![a-z])(?:o?auth|tokens?|api.?keys?)(?![a-z])|unauthori[sz]|authenticat|authori[sz]|credential|forbidden|\b401\b/i;
 
-export function classifyFailure(msg: string): 'timeout' | 'auth-required' | 'startup-failure' {
+/**
+ * A JSON-RPC refusal that names the protocol rather than the server. Anchored
+ * on this harness's own phrasing from `rpcErrorMessage`, never on a bare code
+ * a server might have printed in its own stderr.
+ *
+ * The two codes are anchored differently because they mean different kinds of
+ * thing, and reading them the same way is how this pattern was wrong first:
+ *
+ * - `METHOD_NOT_FOUND` (-32601) is meaningful only relative to a *method*. It
+ *   says the server has no handler. Answering `initialize`, that is the
+ *   revision — `2026-07-28` removed the handshake in favour of
+ *   `server/discover`. Answering `tools/list`, it is the server: it exposes no
+ *   tools, which is its own property and stays a `startup-failure`. So this
+ *   arm names the method.
+ * - `UNSUPPORTED_PROTOCOL_VERSION` (-32022) is meaningful only relative to a
+ *   *version*. Its schema definition — "the request's protocol version is
+ *   unknown to the server or unsupported" — says nothing about which request
+ *   carried it, and under `2026-07-28` the version travels in a per-request
+ *   `_meta` field, so any request can be the one refused. It cannot mean the
+ *   server has no tools whatever method it answers, so this arm names no
+ *   method. Anchoring it to `initialize` would have published a
+ *   `startup-failure` about a working server, which is the exact harm this
+ *   status exists to prevent.
+ *
+ * Read from the modelcontextprotocol repository on 2026-09-08: -32601 at
+ * `schema/2026-07-28/schema.ts:314`, -32022 at :450, and `tools/list` still
+ * defined at :1768. -32022 appears in no earlier revision (`2025-11-25` has
+ * neither the constant nor `server/discover`), and the revision that
+ * introduces it has no `initialize` — so a -32022 answering `initialize` can
+ * only come from a server keeping a back-compat shim, and the realistic
+ * placement is a later request. One inference is worth naming rather than
+ * hiding: this probe sends no per-request `_meta` version, so a strict server
+ * would answer the missing required field with `INVALID_PARAMS`; -32022
+ * arrives only if such a server carries the handshake-negotiated version
+ * forward.
+ *
+ * Not evidence, and not to be invented: a process exit (a server that logs
+ * `server/discover` and dies has told us nothing about why), a timeout, or
+ * `-32600`/`-32602` from any method — the last of those is indistinguishable
+ * from a malformed request, and widening to cover it would have to be argued
+ * from a real record.
+ */
+export const PROTOCOL_MISMATCH_EVIDENCE =
+  /server error -32601 answering initialize\b|server error -32022 answering \S/;
+
+export function classifyFailure(
+  msg: string,
+): 'timeout' | 'auth-required' | 'protocol-mismatch' | 'startup-failure' {
   // Matched against this harness's own phrasing, not the bare word: these
   // messages carry the server's stderr, and a server that prints "connection
   // timeout" before dying did not time out — it exited, and saying otherwise
   // blames the clock for a breakage.
   if (/timeout after \d+ms waiting for/.test(msg)) return 'timeout';
+  // Ahead of AUTH_EVIDENCE deliberately. This pattern needs our own phrasing
+  // and a specific code; AUTH_EVIDENCE is a word list run against arbitrary
+  // third-party prose, and a server is entitled to mention a token in the same
+  // breath as refusing our revision.
+  if (PROTOCOL_MISMATCH_EVIDENCE.test(msg)) return 'protocol-mismatch';
   return AUTH_EVIDENCE.test(msg) ? 'auth-required' : 'startup-failure';
 }
 
@@ -122,38 +176,41 @@ export function notApplicableReason(
   return msg.toLowerCase().includes(declared.evidence.toLowerCase()) ? declared.reason : null;
 }
 
-function arg(name: string): string | undefined {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? process.argv[i + 1] : undefined;
-}
-
 export interface MeasureOptions {
-  timeoutMs?: number;
-  env?: Record<string, string>;
-  root?: string;
-  docker?: boolean;
-  dockerImage?: string;
+  timeoutMs?: number | undefined;
+  env?: Record<string, string> | undefined;
+  root?: string | undefined;
+  docker?: boolean | undefined;
+  dockerImage?: string | undefined;
   /** env var NAMES to provide as dummy values (docker mode). */
-  dummyEnv?: string[];
+  dummyEnv?: string[] | undefined;
   /** Override the literal `dummy` value for specific `dummyEnv` names — see docker.ts. */
-  dummyEnvValues?: Record<string, string>;
+  dummyEnvValues?: Record<string, string> | undefined;
   /** Install `git` in the container before launch (docker mode) — see docker.ts. */
-  needsGit?: boolean;
+  needsGit?: boolean | undefined;
   /** Debian packages to install in the container before launch. */
-  aptPackages?: string[];
+  aptPackages?: string[] | undefined;
   /** Declared harness limitation for this entry — see `notApplicable` in report.ts. */
-  notApplicable?: { reason: string; evidence: string };
+  notApplicable?: { reason: string; evidence: string } | undefined;
   /**
    * Exact argv, when the caller already has it (client configs store command and
    * args separately). Avoids re-splitting a joined string on spaces, which would
    * break any path containing one. Host path only — docker still wraps `command`.
    */
-  argv?: string[];
+  argv?: string[] | undefined;
   /**
    * Write results/<name>/measurement.json + badges/<name>.json (default true).
    * `audit` runs in the user's own directory and must not litter it.
    */
-  persist?: boolean;
+  persist?: boolean | undefined;
+  /**
+   * What the client declares at `initialize`, and how it answers what that
+   * invites. Every published measurement was taken declaring nothing, which is
+   * the default; a probe passes a different posture to find out whether a
+   * server gates tools on it. Changing the default would change published
+   * numbers, so it is a measurement decision and not a flag to flip lightly.
+   */
+  posture?: ClientPosture | undefined;
 }
 
 /**
@@ -244,7 +301,7 @@ export async function measureServer(
   // is already its own `docker run` owns its exit codes and its image.
   const dockerWrapped = opts.docker === true && !isSelfContainerised(command);
   const hostSpec: string | { command: string; argv: string[] } =
-    opts.argv && opts.argv.length ? { command: opts.argv[0], argv: opts.argv.slice(1) } : command;
+    opts.argv && opts.argv.length ? { command: opts.argv[0]!, argv: opts.argv.slice(1) } : command;
   let isolation: Measurement['isolation'] = { docker: false };
   const containerNames: string[] = [];
   // A fresh container name per capture: some servers don't exit on stdin close
@@ -290,7 +347,11 @@ export async function measureServer(
       // The declared evidence travels with the launch, because the truncation
       // that could lose it happens inside the client, before anything here sees
       // the message it will be classified from.
-      const captureOpts = { ...attemptOpts, keepEvidence: opts.notApplicable?.evidence };
+      const captureOpts = {
+        ...attemptOpts,
+        keepEvidence: opts.notApplicable?.evidence,
+        posture: opts.posture,
+      };
       const first = await captureTools(buildSpec(noSharedCache), captureOpts);
       const second = await captureTools(buildSpec(noSharedCache), captureOpts);
       r = measureTools(first.tools, {
@@ -299,10 +360,19 @@ export async function measureServer(
         launchCommand: command,
         envVarNames: [...Object.keys(opts.env ?? {}), ...(opts.dummyEnv ?? [])],
         instructions: first.instructions,
+        negotiatedProtocolVersion: first.protocolVersion,
       });
       if (canonicalString(first.tools) !== canonicalString(second.tools)) {
         r.status = 'dynamic';
         r.notes = 'tools/list differed between two runs; value is for the first capture';
+      }
+      if (first.tools.length === 0) {
+        // Zero is the server's answer and is measured as such — no status is
+        // invented for it. The note says what the zero is; the population
+        // check in harness-guard.ts (`hasNumber`) declines to count it as
+        // evidence that the harness works.
+        const zero = emptyToolsNote(first.declaresTools);
+        r.notes = r.notes ? `${r.notes} ${zero}` : zero;
       }
     } catch (err) {
       if (err instanceof DockerHarnessFault) throw err;
@@ -311,7 +381,9 @@ export async function measureServer(
       // launched the server — classifying it would publish a fact about this
       // machine as a fact about the server, so it is thrown instead of returned.
       if (dockerWrapped && isDockerRunFailure(msg)) {
-        throw new DockerHarnessFault(`docker could not run the container for ${name}: ${msg.slice(0, 400)}`);
+        throw new DockerHarnessFault(
+          `docker could not run the container for ${name}: ${msg.slice(0, 400)}`,
+        );
       }
       const declared = notApplicableReason(opts.notApplicable, msg);
       r = failedMeasurement(declared ? 'not-applicable' : classifyFailure(msg), {
@@ -319,13 +391,22 @@ export async function measureServer(
         launchCommand: command,
         // The declared reason leads, but the raw failure stays behind it: the
         // record has to remain checkable against the run that produced it.
-        notes: clampNotes(declared ? `${declared} — ${msg}` : msg, 700, opts.notApplicable?.evidence),
+        notes: clampNotes(
+          declared ? `${declared} — ${msg}` : msg,
+          700,
+          opts.notApplicable?.evidence,
+        ),
       });
     }
     const iso = isolation ?? { docker: false };
     const arch = await observedArch(iso);
     r.isolation = { ...iso, ...(arch ? { arch } : {}) };
     r.timeoutMs = attemptOpts.timeoutMs ?? 60_000;
+    // Beside `timeoutMs` and `isolation`, and for the same reason: stamped
+    // after the branch so a failed record carries it too. A `protocol-mismatch`
+    // record is the one that most needs it, and its note cannot be relied on —
+    // the server's own `data.requested` is present only when it sent one.
+    r.requestedProtocolVersion = PROTOCOL_VERSION;
     return r;
   }
 
@@ -381,12 +462,27 @@ export async function measureServer(
 // Exact path match, not endsWith('run.ts'): any other file whose name happens to
 // end in "run.ts" (src/audit/run.ts, a scratch dryrun.ts) would otherwise run this
 // block and exit 2 on missing --name.
-const isMain = process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const isMain =
+  process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
-  const name = arg('name');
-  const command = arg('command');
+  const SPEC = {
+    value: ['name', 'command', 'timeout', 'docker-image'],
+    boolean: ['docker', 'no-persist'],
+  };
+  const argv = process.argv.slice(2);
+  const bad = [...unknownFlags(argv, SPEC), ...valuelessFlags(argv, SPEC)];
+  if (bad.length) {
+    console.error(`unrecognised or valueless: ${bad.join(', ')}`);
+    process.exit(2);
+  }
+  const known = knownFlagNames(SPEC);
+
+  const name = flagValue(argv, 'name', known);
+  const command = flagValue(argv, 'command', known);
   if (!name || !command) {
-    console.error('usage: npm run sweep -- --name <slug> --command "<launch command>" [--docker] [--timeout <ms>] [--no-persist]');
+    console.error(
+      'usage: npm run sweep -- --name <slug> --command "<launch command>" [--docker] [--timeout <ms>] [--no-persist]',
+    );
     process.exit(2);
   }
   // `--no-persist` is the form a contributor is told to run (README, "Measure
@@ -398,13 +494,13 @@ if (isMain) {
   // (`local-mcp` sat published as a startup failure whose real finding was that
   // the laptop was arm64), so the instruction has to be one that cannot commit
   // a laptop's reading by accident.
-  const persist = !process.argv.includes('--no-persist');
+  const persist = !argv.includes('--no-persist');
   let m: Measurement;
   try {
     m = await measureServer(name, command, {
-      timeoutMs: Number(arg('timeout') ?? 60_000),
-      docker: process.argv.includes('--docker'),
-      dockerImage: arg('docker-image'),
+      timeoutMs: Number(flagValue(argv, 'timeout', known) ?? 60_000),
+      docker: argv.includes('--docker'),
+      dockerImage: flagValue(argv, 'docker-image', known),
       persist,
     });
   } catch (err) {
@@ -435,4 +531,38 @@ if (isMain) {
     );
   }
   process.exit(m.status === 'measured' || m.status === 'dynamic' ? 0 : 1);
+}
+
+/**
+ * The note a `measured` record carries when `tools/list` answered `[]`.
+ *
+ * An empty list is a real answer — a prompts- or resources-only server has
+ * nothing to list — and it is recorded as the measurement it is: zero tools,
+ * zero tokens of definitions. What the note adds is the one fact that makes the
+ * zero readable, the server's own `capabilities` declaration at `initialize`:
+ * a server that declared no tools and listed none is coherent; one that
+ * declared tools and listed none has said two different things, and the record
+ * says so rather than picking one. Nothing here claims *why* the list was
+ * empty; `hasNumber` in harness-guard.ts is where a zero stops counting as
+ * evidence, because a harness that gets nothing back from every server looks
+ * exactly like this, for everyone at once.
+ */
+export function emptyToolsNote(declaresTools: boolean | null): string {
+  const measured = 'This record measures that answer — zero tools, zero tokens of definitions';
+  if (declaresTools === true) {
+    return (
+      'tools/list answered with an empty array although the server declared a tools ' +
+      `capability at initialize. ${measured} — and claims nothing about why the list was empty.`
+    );
+  }
+  if (declaresTools === false) {
+    return (
+      'tools/list answered with an empty array, and the server declared no tools capability ' +
+      `at initialize: it exposes no tools. ${measured}.`
+    );
+  }
+  return (
+    'tools/list answered with an empty array; the initialize result carried no capabilities ' +
+    `object to read it against. ${measured} — and claims nothing about why the list was empty.`
+  );
 }

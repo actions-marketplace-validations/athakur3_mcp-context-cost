@@ -1,6 +1,8 @@
 # emailmd — context cost
 
-**585 tokens** across 3 tools — *lean* (< 1K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**585 tokens** across 3 tools — *lean* (< 1K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
+
+An Anthropic request carries 542 of those tokens as tool definitions, and Claude counts those at **1,255**.
 
 | | |
 |---|---|
@@ -8,7 +10,7 @@
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y emailmd mcp` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | none |
 | canonical SHA-256 | `991fa59036ab1d4a4c1270ba14025668cd37bad41d9a804544a5e6aa23564365` |
 | category | community |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | render | 227 | 38.8% | 65 | 138 |
 | lint | 196 | 33.5% | 64 | 108 |
@@ -26,7 +28,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -42,6 +44,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 |---|---:|---:|---|---|---:|
 | 2026-09-03 | 585 | 3 | not recorded | docker | — |
 | 2026-09-04 | 585 | 3 | 0.11.0 | docker | no change |
+| 2026-09-16 | 585 | 3 | 0.11.0 | docker | no change |
 
 Full series: [results/history.csv](https://github.com/athakur3/mcp-context-cost/blob/main/results/history.csv).
 

@@ -2,13 +2,15 @@
 
 **3,960 tokens** across 19 tools — *light* (1–5K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
 
+An Anthropic request carries 3,699 of those tokens as tool definitions, and Claude counts those at **6,622**.
+
 | | |
 |---|---|
 | server (self-reported) | arxiv-mcp-server v0.7.2 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `uvx arxiv-mcp-server` |
-| isolation | docker · ghcr.io/astral-sh/uv:python3.12-bookworm-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · ghcr.io/astral-sh/uv:python3.12-bookworm-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | none |
 | canonical SHA-256 | `2ee361441efca1de3e296a572bbe2d20fa88d5565c9d4f54a8a1523ee7f54251` |
 | category | community |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | search_papers | 516 | 13.0% | 211 | 273 |
 | watch_topic | 354 | 8.9% | 150 | 172 |
@@ -42,7 +44,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|

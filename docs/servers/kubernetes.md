@@ -1,14 +1,16 @@
 # kubernetes — context cost
 
-**5,268 tokens** across 23 tools — *moderate* (5–15K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**5,268 tokens** across 23 tools — *moderate* (5–15K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
+
+An Anthropic request carries 5,089 of those tokens as tool definitions, and Claude counts those at **9,165**.
 
 | | |
 |---|---|
-| server (self-reported) | kubernetes v4.1.6 |
+| server (self-reported) | kubernetes v4.1.7 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y mcp-server-kubernetes` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | none |
 | canonical SHA-256 | `20126671be70fdb77743a595f195002612b03c889b348447ed9ff4d7057f8c1c` |
 | category | community |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | kubectl_create | 945 | 17.9% | 14 | 919 |
 | node_management | 341 | 6.5% | 14 | 308 |
@@ -46,7 +48,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -65,6 +67,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-26 | 5,268 | 23 | not recorded | docker | no change |
 | 2026-09-03 | 5,268 | 23 | not recorded | docker | no change |
 | 2026-09-04 | 5,268 | 23 | 4.1.6 | docker | no change |
+| 2026-09-16 | 5,268 | 23 | 4.1.7 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

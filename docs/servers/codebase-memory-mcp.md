@@ -1,6 +1,8 @@
 # codebase-memory-mcp — context cost
 
-**5,258 tokens** across 15 tools — *moderate* (5–15K). Measured 2026-09-05 under [methodology v1.0](../METHODOLOGY.html).
+**5,258 tokens** across 15 tools — *moderate* (5–15K). Measured 2026-09-09 under [methodology v1.0](../METHODOLOGY.html).
+
+An Anthropic request carries 4,774 of those tokens as tool definitions, and Claude counts those at **8,585**.
 
 | | |
 |---|---|
@@ -8,7 +10,7 @@
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y codebase-memory-mcp` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | none |
 | canonical SHA-256 | `01a1bd0f450ccf86b0bf36b2b63749c70dc4add7b0a4d9621ce69e29c9db7b27` |
 | category | community |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | search_graph | 905 | 17.2% | 324 | 537 |
 | trace_path | 732 | 13.9% | 170 | 520 |
@@ -38,7 +40,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -55,6 +57,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-09-03 | 5,258 | 15 | not recorded | docker | — |
 | 2026-09-04 | 5,258 | 15 | 0.10.8 | docker | no change |
 | 2026-09-05 | 5,258 | 15 | 0.10.8 | docker | no change |
+| 2026-09-09 | 5,258 | 15 | 0.10.8 | docker | no change |
 
 Full series: [results/history.csv](https://github.com/athakur3/mcp-context-cost/blob/main/results/history.csv).
 

@@ -1,6 +1,8 @@
 # chroma — context cost
 
-**2,837 tokens** across 13 tools — *light* (1–5K). Measured 2026-09-05 under [methodology v1.0](../METHODOLOGY.html).
+**2,837 tokens** across 13 tools — *light* (1–5K). Measured 2026-09-09 under [methodology v1.0](../METHODOLOGY.html).
+
+An Anthropic request carries 2,837 of those tokens as tool definitions, and Claude counts those at **5,222**.
 
 | | |
 |---|---|
@@ -8,7 +10,7 @@
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `uvx chroma-mcp` |
-| isolation | docker · ghcr.io/astral-sh/uv:python3.12-bookworm-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · ghcr.io/astral-sh/uv:python3.12-bookworm-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | none |
 | canonical SHA-256 | `eb0b416a1586989ce3f646259f9f96d0ae6d7b62342aa30393b10ecb7c03c707` |
 | category | vendor-official |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | chroma_get_documents | 610 | 21.5% | 337 | 200 |
 | chroma_query_documents | 546 | 19.2% | 310 | 167 |
@@ -36,7 +38,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -54,6 +56,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-18 | 2,837 | 13 | not recorded | docker | no change |
 | 2026-09-04 | 2,837 | 13 | 1.6.0 | docker | no change |
 | 2026-09-05 | 2,837 | 13 | 1.6.0 | docker | no change |
+| 2026-09-09 | 2,837 | 13 | 1.6.0 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

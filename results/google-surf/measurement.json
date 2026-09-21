@@ -10,43 +10,57 @@
       "name": "search",
       "tokens": 1737,
       "descriptionTokens": 478,
-      "inputSchemaTokens": 612
+      "inputSchemaTokens": 612,
+      "outputSchemaTokens": 599,
+      "annotationsTokens": 20
     },
     {
       "name": "scholar_search",
       "tokens": 981,
       "descriptionTokens": 134,
-      "inputSchemaTokens": 302
+      "inputSchemaTokens": 302,
+      "outputSchemaTokens": 496,
+      "annotationsTokens": 20
     },
     {
       "name": "search_parallel",
       "tokens": 1860,
       "descriptionTokens": 482,
-      "inputSchemaTokens": 631
+      "inputSchemaTokens": 631,
+      "outputSchemaTokens": 697,
+      "annotationsTokens": 20
     },
     {
       "name": "extract",
       "tokens": 1249,
       "descriptionTokens": 330,
-      "inputSchemaTokens": 511
+      "inputSchemaTokens": 511,
+      "outputSchemaTokens": 358,
+      "annotationsTokens": 20
     },
     {
       "name": "project_memory_search",
       "tokens": 1436,
       "descriptionTokens": 208,
-      "inputSchemaTokens": 261
+      "inputSchemaTokens": 261,
+      "outputSchemaTokens": 917,
+      "annotationsTokens": 20
     },
     {
       "name": "project_memory",
       "tokens": 3279,
       "descriptionTokens": 285,
-      "inputSchemaTokens": 2030
+      "inputSchemaTokens": 2030,
+      "outputSchemaTokens": 917,
+      "annotationsTokens": 20
     },
     {
       "name": "health",
       "tokens": 404,
       "descriptionTokens": 50,
-      "inputSchemaTokens": 24
+      "inputSchemaTokens": 24,
+      "outputSchemaTokens": 281,
+      "annotationsTokens": 20
     }
   ],
   "canonicalSha256": "64ca81a34311e1318d731b8fbf14e5f1759567e4a7bdaabf43f3553ee732ee41",
@@ -2447,12 +2461,13 @@
       }
     }
   ],
-  "measuredAt": "2026-09-05T23:42:27.496Z",
+  "measuredAt": "2026-09-09T08:06:38.688Z",
   "serverName": "google-surf-mcp",
   "serverVersion": "1.0.9",
   "launchCommand": "npx -y google-surf-mcp",
   "envVarNames": [],
   "serverInstructions": null,
+  "negotiatedProtocolVersion": "2025-06-18",
   "isolation": {
     "docker": true,
     "image": "public.ecr.aws/docker/library/node:22-slim",
@@ -2460,5 +2475,6 @@
     "note": "network enabled for package fetch; clean FS, no host credentials",
     "arch": "linux/amd64"
   },
-  "timeoutMs": 240000
+  "timeoutMs": 240000,
+  "requestedProtocolVersion": "2025-06-18"
 }

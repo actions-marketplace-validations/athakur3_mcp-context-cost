@@ -1,6 +1,8 @@
 # xcodebuildmcp — context cost
 
-**26,594 tokens** across 24 tools — *heavy* (15–30K). Measured 2026-09-05 under [methodology v1.0](../METHODOLOGY.html).
+**26,594 tokens** across 24 tools — *heavy* (15–30K). Measured 2026-09-09 under [methodology v1.0](../METHODOLOGY.html).
+
+An Anthropic request carries 2,676 of those tokens as tool definitions, and Claude counts those at **5,335**.
 
 | | |
 |---|---|
@@ -8,7 +10,7 @@
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y xcodebuildmcp@latest mcp` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | none |
 | canonical SHA-256 | `f467743f38a30d15da18709c500aa4e22186a755f0e3d2c97966ccd343978a5d` |
 | category | community |
@@ -16,38 +18,38 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
-|---|---:|---:|---:|---:|
-| snapshot_ui | 2,139 | 8.0% | 45 | 51 |
-| record_sim_video | 2,123 | 8.0% | 4 | 74 |
-| screenshot | 2,099 | 7.9% | 3 | 54 |
-| session_set_defaults | 1,616 | 6.1% | 18 | 555 |
-| test_sim | 1,391 | 5.2% | 6 | 167 |
-| session_clear_defaults | 1,197 | 4.5% | 12 | 142 |
-| get_file_coverage | 1,176 | 4.4% | 13 | 92 |
-| get_coverage_report | 1,173 | 4.4% | 11 | 91 |
-| build_run_sim | 1,115 | 4.2% | 43 | 79 |
-| session_show_defaults | 1,092 | 4.1% | 24 | 24 |
-| build_sim | 1,081 | 4.1% | 12 | 88 |
-| boot_sim | 1,019 | 3.8% | 22 | 24 |
-| open_sim | 1,019 | 3.8% | 22 | 24 |
-| clean | 1,004 | 3.8% | 4 | 77 |
-| discover_projs | 870 | 3.3% | 37 | 65 |
-| get_sim_app_path | 842 | 3.2% | 6 | 53 |
-| launch_app_sim | 839 | 3.2% | 21 | 91 |
-| install_app_sim | 739 | 2.8% | 5 | 47 |
-| stop_app_sim | 737 | 2.8% | 4 | 24 |
-| list_schemes | 736 | 2.8% | 5 | 59 |
-| show_build_settings | 717 | 2.7% | 4 | 24 |
-| get_app_bundle_id | 685 | 2.6% | 7 | 45 |
-| session_use_defaults_profile | 598 | 2.2% | 7 | 89 |
-| list_sims | 585 | 2.2% | 6 | 29 |
+| tool | tokens | share | description | input schema | output schema |
+|---|---:|---:|---:|---:|---:|
+| snapshot_ui | 2,139 | 8.0% | 45 | 51 | 1,997 |
+| record_sim_video | 2,123 | 8.0% | 4 | 74 | 1,997 |
+| screenshot | 2,099 | 7.9% | 3 | 54 | 1,997 |
+| session_set_defaults | 1,616 | 6.1% | 18 | 555 | 995 |
+| test_sim | 1,391 | 5.2% | 6 | 167 | 1,172 |
+| session_clear_defaults | 1,197 | 4.5% | 12 | 142 | 995 |
+| get_file_coverage | 1,176 | 4.4% | 13 | 92 | 1,022 |
+| get_coverage_report | 1,173 | 4.4% | 11 | 91 | 1,022 |
+| build_run_sim | 1,115 | 4.2% | 43 | 79 | 944 |
+| session_show_defaults | 1,092 | 4.1% | 24 | 24 | 995 |
+| build_sim | 1,081 | 4.1% | 12 | 88 | 934 |
+| boot_sim | 1,019 | 3.8% | 22 | 24 | 925 |
+| open_sim | 1,019 | 3.8% | 22 | 24 | 925 |
+| clean | 1,004 | 3.8% | 4 | 77 | 879 |
+| discover_projs | 870 | 3.3% | 37 | 65 | 721 |
+| get_sim_app_path | 842 | 3.2% | 6 | 53 | 733 |
+| launch_app_sim | 839 | 3.2% | 21 | 91 | 678 |
+| install_app_sim | 739 | 2.8% | 5 | 47 | 639 |
+| stop_app_sim | 737 | 2.8% | 4 | 24 | 660 |
+| list_schemes | 736 | 2.8% | 5 | 59 | 623 |
+| show_build_settings | 717 | 2.7% | 4 | 24 | 640 |
+| get_app_bundle_id | 685 | 2.6% | 7 | 45 | 583 |
+| session_use_defaults_profile | 598 | 2.2% | 7 | 89 | 452 |
+| list_sims | 585 | 2.2% | 6 | 29 | 502 |
 
 Each tool is tokenized on its own, so the parts do not sum exactly to the whole: the array adds its own brackets and commas, and the tokenizer merges tokens across object boundaries. The badge number is always the count of the whole array, never a sum of parts.
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -65,6 +67,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-19 | 26,594 | 24 | not recorded | docker | no change |
 | 2026-09-04 | 26,594 | 24 | 2.7.0 | docker | no change |
 | 2026-09-05 | 26,594 | 24 | 2.7.0 | docker | no change |
+| 2026-09-09 | 26,594 | 24 | 2.7.0 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

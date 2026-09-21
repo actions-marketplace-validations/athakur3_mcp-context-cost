@@ -3,19 +3,28 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  SESSION_START_METHOD,
-  isCurrentInstructions,
   measuredInstructions,
-  parseSessionStart,
   sessionStartLoad,
   sessionStartTokens,
-  toSessionStartRow,
   toolNameTokens,
   toolNames,
-  type SessionStartRow,
 } from '../src/core/session-start.js';
-import { countTokens, measureTools, sha256Hex } from '../src/core/canonical.js';
+import { countTokens, measureTools } from '../src/core/canonical.js';
 import { writeLeaderboard, sessionStartCell, type ServerEntry } from '../src/sweep/report.js';
+
+/**
+ * Which `split('|')` cell holds the session-start figure, read from the
+ * leaderboard's own header rather than counted by hand. Both reads below were
+ * the constant `4`, which was right until a `mapped` column landed to the left
+ * of it — a positional read that keeps returning a number after the number it
+ * points at has changed is worse than one that breaks.
+ */
+const sessionStartCol = (md: string) => {
+  const header = md.split('\n').find((l) => l.startsWith('| # | server |'))!;
+  const i = header.split('|').findIndex((c) => c.trim() === 'session start');
+  expect(i, 'no session start column in the leaderboard header').toBeGreaterThan(0);
+  return i;
+};
 import type { Measurement } from '../src/core/types.js';
 
 const rawTools = [
@@ -57,7 +66,9 @@ describe('toolNames', () => {
 
 describe('the session-start number', () => {
   it('is the JSON.stringify of the name array, tokenized like the headline', () => {
-    expect(toolNameTokens(rawTools)).toBe(countTokens(JSON.stringify(['search', 'fetch_document'])));
+    expect(toolNameTokens(rawTools)).toBe(
+      countTokens(JSON.stringify(['search', 'fetch_document'])),
+    );
   });
 
   it('is dramatically smaller than the full definitions it defers', () => {
@@ -100,8 +111,12 @@ describe('measuredInstructions — absent is not zero', () => {
 
 describe('measureTools records the instructions it was given', () => {
   it('stores a string, and null when the server returned none', () => {
-    expect(measureTools(rawTools, { serverName: 'demo', instructions: 'use me' }).serverInstructions).toBe('use me');
-    expect(measureTools(rawTools, { serverName: 'demo', instructions: null }).serverInstructions).toBeNull();
+    expect(
+      measureTools(rawTools, { serverName: 'demo', instructions: 'use me' }).serverInstructions,
+    ).toBe('use me');
+    expect(
+      measureTools(rawTools, { serverName: 'demo', instructions: null }).serverInstructions,
+    ).toBeNull();
   });
 
   it('leaves the field out of the JSON entirely when nothing was captured', () => {
@@ -110,7 +125,10 @@ describe('measureTools records the instructions it was given', () => {
   });
 
   it('does not disturb the headline number or its hash', () => {
-    const bare = measureTools(rawTools, { serverName: 'demo', measuredAt: '2026-08-19T00:00:00.000Z' });
+    const bare = measureTools(rawTools, {
+      serverName: 'demo',
+      measuredAt: '2026-08-19T00:00:00.000Z',
+    });
     const withInstructions = measureTools(rawTools, {
       serverName: 'demo',
       measuredAt: '2026-08-19T00:00:00.000Z',
@@ -122,44 +140,12 @@ describe('measureTools records the instructions it was given', () => {
 });
 
 describe('sessionStartLoad', () => {
-  it('prefers the measurement over a side capture, even a current one', () => {
-    const m = measurement({ serverInstructions: 'from the same run' });
-    const row = toSessionStartRow('from a later capture', { capturedSha256: m.canonicalSha256 });
-    const load = sessionStartLoad(m, row)!;
+  it('reads the instructions off the measurement that carries them', () => {
+    const load = sessionStartLoad(measurement({ serverInstructions: 'from the same run' }))!;
     expect(load.instructionsSource).toBe('measurement');
     expect(load.instructionsTokens).toBe(countTokens('from the same run'));
+    expect(load.totalTokens).toBe(toolNameTokens(rawTools) + countTokens('from the same run'));
     expect(load.isFloor).toBe(false);
-  });
-
-  it('falls back to a side capture that still points at the measurement on disk', () => {
-    const m = legacyMeasurement();
-    const row = toSessionStartRow('backfilled instructions', { capturedSha256: m.canonicalSha256 });
-    const load = sessionStartLoad(m, row)!;
-    expect(load.instructionsSource).toBe('capture');
-    expect(load.totalTokens).toBe(toolNameTokens(rawTools) + countTokens('backfilled instructions'));
-    expect(load.isFloor).toBe(false);
-  });
-
-  it('degrades a STALE capture to the names-only floor instead of blanking the row', () => {
-    const m = legacyMeasurement();
-    const row = toSessionStartRow('captured against different tools', { capturedSha256: 'b'.repeat(64) });
-    const load = sessionStartLoad(m, row)!;
-    expect(load.instructionsSource).toBe('not-captured');
-    expect(load.isFloor).toBe(true);
-    expect(load.totalTokens).toBe(toolNameTokens(rawTools));
-    expect(load.instructionsTokens).toBeNull();
-  });
-
-  it('marks an errored capture row as a floor rather than counting it as zero', () => {
-    const m = legacyMeasurement();
-    const row: SessionStartRow = {
-      instructions: '',
-      instructionsTokens: 0,
-      instructionsSha256: '',
-      capturedSha256: m.canonicalSha256,
-      error: 'startup-failure: exited 1',
-    };
-    expect(sessionStartLoad(m, row)!.isFloor).toBe(true);
   });
 
   it('reports a floor when nothing has ever been captured', () => {
@@ -169,7 +155,9 @@ describe('sessionStartLoad', () => {
   });
 
   it('is null for a measurement with no capture at all — no session, no load', () => {
-    expect(sessionStartLoad(measurement({ rawToolsCapture: null, status: 'startup-failure' }))).toBeNull();
+    expect(
+      sessionStartLoad(measurement({ rawToolsCapture: null, status: 'startup-failure' })),
+    ).toBeNull();
   });
 
   // The names half IS bounded by the definitions — every name is bytes inside
@@ -180,7 +168,9 @@ describe('sessionStartLoad', () => {
   // so the assertion is scoped to the half that is genuinely guaranteed and the
   // other half is pinned below.
   it('never claims a names half larger than the definitions it defers', () => {
-    const load = sessionStartLoad(measurement({ serverInstructions: 'Prefer search over fetch.' }))!;
+    const load = sessionStartLoad(
+      measurement({ serverInstructions: 'Prefer search over fetch.' }),
+    )!;
     expect(load.toolNameTokens).toBeLessThan(measurement().totalTokens!);
   });
 
@@ -196,40 +186,6 @@ describe('sessionStartLoad', () => {
     expect(load.isFloor).toBe(false);
     expect(load.totalTokens).toBeGreaterThan(m.totalTokens!);
     expect(load.totalTokens).toBe(load.toolNameTokens + load.instructionsTokens!);
-  });
-});
-
-describe('isCurrentInstructions', () => {
-  const row = toSessionStartRow('x', { capturedSha256: 'a'.repeat(64) });
-  it('needs a matching hash on both sides', () => {
-    expect(isCurrentInstructions(row, 'a'.repeat(64))).toBe(true);
-    expect(isCurrentInstructions(row, 'b'.repeat(64))).toBe(false);
-    expect(isCurrentInstructions(row, null)).toBe(false);
-    expect(isCurrentInstructions(undefined, 'a'.repeat(64))).toBe(false);
-  });
-  it('rejects a row whose capture never happened', () => {
-    expect(isCurrentInstructions({ ...row, capturedSha256: null }, null)).toBe(false);
-  });
-});
-
-describe('toSessionStartRow', () => {
-  it('hashes the instructions bytes so the row is disputable like every other number', () => {
-    const r = toSessionStartRow('be careful', { capturedSha256: null });
-    expect(r.instructionsSha256).toBe(sha256Hex('be careful'));
-    expect(r.instructionsTokens).toBe(countTokens('be careful'));
-  });
-});
-
-describe('parseSessionStart', () => {
-  it('returns null rather than throwing on anything malformed', () => {
-    expect(parseSessionStart('not json')).toBeNull();
-    expect(parseSessionStart('{}')).toBeNull();
-    expect(parseSessionStart('{"measuredAt":"2026-08-20"}')).toBeNull();
-  });
-  it('defaults the method but never invents a date', () => {
-    const run = parseSessionStart('{"measuredAt":"2026-08-20","servers":{}}')!;
-    expect(run.method).toBe(SESSION_START_METHOD);
-    expect(run.measuredAt).toBe('2026-08-20');
   });
 });
 
@@ -249,11 +205,19 @@ describe('the leaderboard shows both figures for every measured server', () => {
   beforeEach(() => {
     root = mkdtempSync(join(tmpdir(), 'ss-report-'));
     mkdirSync(join(root, 'results'), { recursive: true });
-    place('known', measurement({ serverName: 'known', serverInstructions: 'Prefer search over fetch.' }));
+    place(
+      'known',
+      measurement({ serverName: 'known', serverInstructions: 'Prefer search over fetch.' }),
+    );
     place('floored', legacyMeasurement({ serverName: 'floored' }));
     place(
       'broken',
-      measurement({ serverName: 'broken', status: 'startup-failure', rawToolsCapture: null, totalTokens: null }),
+      measurement({
+        serverName: 'broken',
+        status: 'startup-failure',
+        rawToolsCapture: null,
+        totalTokens: null,
+      }),
     );
   });
   afterEach(() => rmSync(root, { recursive: true, force: true }));
@@ -263,14 +227,19 @@ describe('the leaderboard shows both figures for every measured server', () => {
     const md = readFileSync(join(root, 'results', 'leaderboard.md'), 'utf8');
     const rows = md.split('\n').filter((l) => /^\| \d+ \|/.test(l));
     expect(rows).toHaveLength(2);
-    for (const r of rows) expect(r.split('|')[4].trim()).toMatch(/^≥?[\d,]+$/);
+    for (const r of rows) expect(r.split('|')[sessionStartCol(md)].trim()).toMatch(/^≥?[\d,]+$/);
   });
 
   it('marks the floored row and only the floored row', () => {
     writeLeaderboard(entries, root);
     const md = readFileSync(join(root, 'results', 'leaderboard.md'), 'utf8');
     const cell = (name: string) =>
-      md.split('\n').find((l) => l.includes(`[${name}]`))!.split('|')[4].trim();
+      md
+        .split('\n')
+        .find((l) => l.includes(`[${name}]`))!
+        .split('|')
+        .at(sessionStartCol(md))!
+        .trim();
     expect(cell('floored').startsWith('≥')).toBe(true);
     expect(cell('known').startsWith('≥')).toBe(false);
     expect(md).toContain('marks a floor, on 1 of 2 rows');
@@ -279,7 +248,9 @@ describe('the leaderboard shows both figures for every measured server', () => {
   it('says nothing about floors when there are none', () => {
     rmSync(join(root, 'results', 'floored'), { recursive: true });
     writeLeaderboard([entries[0], entries[2]], root);
-    expect(readFileSync(join(root, 'results', 'leaderboard.md'), 'utf8')).not.toContain('marks a floor');
+    expect(readFileSync(join(root, 'results', 'leaderboard.md'), 'utf8')).not.toContain(
+      'marks a floor',
+    );
   });
 
   it('names the rows where deferring costs more, with both figures', () => {
@@ -305,28 +276,16 @@ describe('the leaderboard shows both figures for every measured server', () => {
 
   it('says nothing about deferring costing more when it never does', () => {
     writeLeaderboard(entries, root);
-    expect(readFileSync(join(root, 'results', 'leaderboard.md'), 'utf8')).not.toContain('Deferring costs more');
-  });
-
-  it('uses a current side capture to lift a legacy row off its floor', () => {
-    const m = JSON.parse(readFileSync(join(root, 'results', 'floored', 'measurement.json'), 'utf8')) as Measurement;
-    writeFileSync(
-      join(root, 'results', 'session-start.json'),
-      JSON.stringify({
-        method: SESSION_START_METHOD,
-        measuredAt: '2026-08-20',
-        servers: { floored: toSessionStartRow('backfilled', { capturedSha256: m.canonicalSha256 }) },
-      }),
+    expect(readFileSync(join(root, 'results', 'leaderboard.md'), 'utf8')).not.toContain(
+      'Deferring costs more',
     );
-    writeLeaderboard(entries, root);
-    const md = readFileSync(join(root, 'results', 'leaderboard.md'), 'utf8');
-    expect(md.split('\n').find((l) => l.includes('[floored]'))!.split('|')[4].trim().startsWith('≥')).toBe(false);
-    expect(md).not.toContain('marks a floor');
   });
 
   it('carries the parts and the floor flag into the CSV, appended after the existing columns', () => {
     writeLeaderboard(entries, root);
-    const csv = readFileSync(join(root, 'results', 'leaderboard.csv'), 'utf8').trim().split('\n');
+    const csv = readFileSync(join(root, 'results', 'leaderboard.csv'), 'utf8')
+      .trim()
+      .split('\n');
     expect(csv[0]).toBe(
       'name,tokens,toolCount,status,category,metric,metricSource,claudeTokens,claudeModel,' +
         'sessionStartTokens,sessionStartIsFloor,toolNameTokens,instructionsTokens,' +
@@ -339,7 +298,12 @@ describe('the leaderboard shows both figures for every measured server', () => {
       String(toolNameTokens(rawTools)),
       String(countTokens('Prefer search over fetch.')),
     ]);
-    expect(cols('floored').slice(9, 13)).toEqual([String(toolNameTokens(rawTools)), 'true', String(toolNameTokens(rawTools)), '']);
+    expect(cols('floored').slice(9, 13)).toEqual([
+      String(toolNameTokens(rawTools)),
+      'true',
+      String(toolNameTokens(rawTools)),
+      '',
+    ]);
     // A server with no capture has no session-start columns at all — not zeros.
     expect(cols('broken').slice(9, 13)).toEqual(['', '', '', '']);
   });

@@ -37,7 +37,7 @@
  *     generation; `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS` "keeps tool search
  *     off. You can't override it by setting `ENABLE_TOOL_SEARCH` yourself."
  *     A server with `alwaysLoad: true` loads at session start regardless.
- *   - The same page, re-read 2026-09-06 (the roadmap's dated re-read). The
+ *   - The same page, re-read 2026-09-06. The
  *     value table stands as quoted, and four things moved around it:
  *     (1) on Google Cloud's Agent Platform, tool search is on by default for
  *     the Claude 4.5 generation and later "the same as on the Anthropic API"
@@ -46,10 +46,15 @@
  *     the exception below already names only the earlier models. (2) Under
  *     `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS`, "your organization can keep
  *     tool search on through managed settings, on Claude Code v2.1.227 or
- *     later" — on a direct connection or a gateway, not on a cloud provider.
- *     This audit reads the managed settings file for the three variables and
- *     nothing else, so that override is not read here and the variable is
- *     still resolved as "off". (3) `alwaysLoad: true` is an entry field on
+ *     later" — on a direct connection or a gateway set with `ANTHROPIC_BASE_URL`,
+ *     and with no effect on a cloud provider or a Claude apps gateway sign-in
+ *     (`code.claude.com/docs/en/llm-gateway-protocol.md`, read 2026-09-08).
+ *     This IS read as of 2026-09-08: `resolveToolSearchSources` looks at the
+ *     administrator tier, and where that tier sets `ENABLE_TOOL_SEARCH` to a
+ *     value the vendor does not document, the disabling variable stops
+ *     deciding and the posture is refused. The value that arms the override is
+ *     in no vendor document, so none is named here and nothing is claimed about
+ *     what it does. (3) `alwaysLoad: true` is an entry field on
  *     every server type, and a tool can carry `"anthropic/alwaysLoad": true`
  *     in its `_meta`. The entry form is read from the config now
  *     (`DeferralServer.alwaysLoad`) and counted rather than listed; the
@@ -58,15 +63,32 @@
  *     a deferring session loads at start — noted beside the session-start
  *     metric in METHODOLOGY, not applied to any number here.
  *
- * No default deferral is on record here for the other clients this tool
- * discovers — Claude Desktop, Cursor, VS Code, Windsurf, and from 2026-09-06
- * Codex CLI, Gemini CLI, Zed, Kiro and Goose, whose configuration pages were
- * read that day and say nothing about deferring tool definitions. That is an
- * absence of a record, not a measurement of those clients, and it is printed
- * as such — the same rule the rest of this project follows for a value it has
- * not observed.
+ * The other clients this tool discovers split in two, and what separates them
+ * is what counts as a record. Until 2026-09-07 the rule read one surface — each
+ * client's own MCP configuration page — and reported an absence of a record for
+ * every client whose page did not mention deferring. Three of those clients say
+ * the opposite elsewhere, on surfaces their own vendors control, the earliest of
+ * them dated eight months before that page was read. So the rule now takes four
+ * kinds of first-party statement, in METHODOLOGY §who-pays: the configuration
+ * page, the vendor's dated blog or changelog, a named staff account on the
+ * vendor's own forum, and the client's public source — a merged pull request or
+ * a settings default in the shipping tree. None of the four is a measurement.
+ *
+ *   - `DEFERRAL_ON_RECORD` — Cursor, Codex CLI, VS Code. The vendor states, or
+ *     the vendor's source shows, that definitions are deferred. What is printed
+ *     is close to Claude Code's honest shape and stops in the same place: the
+ *     vendor says so, this audit has not measured it, the conditions it depends
+ *     on are listed rather than resolved, and for none of the three does a file
+ *     this audit reads state the posture.
+ *   - `NO_DEFERRAL_ON_RECORD` — Claude Desktop, Windsurf, Gemini CLI, Zed, Kiro,
+ *     Goose. Still an absence of a record and printed as such, and now an
+ *     absence that was looked for: the three of them that are open source were
+ *     searched for a tool-search or deferral mechanism on 2026-09-07 and none
+ *     was found, while Claude Desktop, Windsurf and Kiro are closed and only
+ *     their pages have been read.
  */
 import type { DivergenceRun } from '../core/divergence.js';
+import type { SourcePolicy } from './mcp-policy.js';
 
 /** Share of the context window at which deferral activates under `auto`. */
 export const TOOL_SEARCH_AUTO_SHARE = 0.1;
@@ -82,9 +104,9 @@ export type ToolSearchVar = (typeof TOOL_SEARCH_VARS)[number];
 
 /** The env vars that decide whether this machine's Claude Code defers. */
 export interface ToolSearchEnv {
-  ENABLE_TOOL_SEARCH?: string;
-  CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS?: string;
-  ANTHROPIC_BASE_URL?: string;
+  ENABLE_TOOL_SEARCH?: string | undefined;
+  CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS?: string | undefined;
+  ANTHROPIC_BASE_URL?: string | undefined;
 }
 
 /** Pick the three variables that matter out of a process environment. */
@@ -108,6 +130,8 @@ export function toolSearchEnv(env: Record<string, string | undefined>): ToolSear
 export type ToolSearchScope =
   | 'shell'
   | 'managed-settings'
+  /** A `managed-settings.d/*.json` drop-in: the managed file's own tier, not a rank below it. */
+  | 'managed-drop-in'
   | 'local-settings'
   | 'project-settings'
   | 'user-settings';
@@ -139,6 +163,12 @@ export interface ToolSearchSource {
    * these tokens are never loaded up front.
    */
   unreadable?: ToolSearchVar[];
+  /**
+   * What this file sets of Claude Code's MCP allowlist/denylist and the
+   * managed-only flag — read off the same open, evaluated in mcp-policy.ts,
+   * and never part of any deferral decision here.
+   */
+  mcpPolicy?: SourcePolicy;
 }
 
 /**
@@ -187,6 +217,11 @@ export type DeferralMode =
   | 'setting-unresolved'
   /** A client we know about, with no default deferral on record. */
   | 'no-deferral-on-record'
+  /**
+   * A client whose vendor states, or whose source shows, that it defers tool
+   * definitions — unmeasured here, and not readable from the config either.
+   */
+  | 'deferral-on-record'
   /** `--config <path>`: the file was read, but which client reads it is unknown. */
   | 'client-unknown';
 
@@ -242,19 +277,70 @@ const FIRST_PARTY_API_HOST = 'api.anthropic.com';
 const UNREADABLE_BASE_URL = '(unreadable URL)';
 
 /**
- * The hostname of a base URL, or null if it does not parse.
+ * The host of a base URL, or null if it does not parse.
  *
- * The hostname is the whole of what the mode decision needs, and it is also the
+ * The **host**, which carries the port, and not the hostname, which does not.
+ * Claude Code compares the host — `new URL(e).host` against a one-entry list
+ * holding `api.anthropic.com`, read from the v2.1.233 bundle on 2026-09-08 —
+ * so `https://api.anthropic.com:8443/v1` is not first-party to the client and
+ * tool search is off there. Comparing the hostname made it first-party here,
+ * and the report then said these tokens are NOT loaded up front at a machine
+ * loading every one of them: an error in the understating direction, which is
+ * the one this file does not get to make.
+ *
+ * Both published tables already say host, so the pages were right and this was
+ * wrong. `URL` drops a scheme's default port, so `https://api.anthropic.com:443`
+ * still reads first-party — the same normalisation the client's own comparison
+ * gets, because it is the same parser.
+ *
+ * The host is the whole of what the mode decision needs, and it is also the
  * whole of what may leave this function: the rest of the value can carry a
- * credential. A value that does not parse is not first-party, which is the
- * reading that says tokens are paid — never the one that says they are free.
+ * credential, and a host is a name and a port, never userinfo. A value that
+ * does not parse is not first-party, which is the reading that says tokens are
+ * paid — never the one that says they are free.
  */
 function baseUrlHost(raw: string): string | null {
   try {
-    return new URL(raw).hostname.toLowerCase();
+    return new URL(raw).host.toLowerCase();
   } catch {
     return null;
   }
+}
+
+/**
+ * How Claude Code reads `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS`: as a boolean
+ * flag, not as a marker whose presence alone is the signal.
+ *
+ * Sources, because this is a claim about someone else's product and it will rot:
+ *
+ *   - `code.claude.com/docs/en/env-vars.md`, read 2026-09-08. "For variables
+ *     that turn a behavior on or off, set `1` or `true` to turn it on and `0`
+ *     or `false` to turn it off, in any casing." The same page names the six
+ *     variables that instead read any non-empty value —
+ *     `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`, `DISABLE_TELEMETRY`,
+ *     `DISABLE_ERROR_REPORTING`, `CLAUDE_CODE_TMUX_TRUECOLOR`,
+ *     `FALLBACK_FOR_ALL_PRIMARY_MODELS` and `IS_DEMO` — and this variable is
+ *     not one of them.
+ *   - The Claude Code v2.1.233 bundle, read 2026-09-08. The variable is
+ *     declared boolean and coerced by the helper every boolean flag uses,
+ *     whose true set is `1`, `true`, `yes`, `on` and whose false set is `0`,
+ *     `false`, `no`, `off`, lower-cased and trimmed. `yes` and `on` are read
+ *     here on that evidence alone: no vendor page states them. If the client
+ *     ever narrows to the documented pair, this over-reports cost for those
+ *     two values — the direction this file is allowed to be wrong in.
+ *
+ * A value in neither set is read as nothing. The documentation does not cover
+ * it, and the bundle leaves tool search ON there — a claim worth more than one
+ * build of one product, so it is refused rather than made.
+ */
+const BETAS_TRUE = new Set(['1', 'true', 'yes', 'on']);
+const BETAS_FALSE = new Set(['0', 'false', 'no', 'off']);
+
+function betasReads(raw: string): 'on' | 'off' | 'unrecognized' {
+  const value = raw.trim().toLowerCase();
+  if (BETAS_TRUE.has(value)) return 'on';
+  if (BETAS_FALSE.has(value)) return 'off';
+  return 'unrecognized';
 }
 
 /**
@@ -269,16 +355,23 @@ function baseUrlHost(raw: string): string | null {
  */
 export function resolveToolSearch(env: ToolSearchEnv): ResolvedToolSearch {
   const betas = env.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS?.trim();
-  // Read first: documented as not overridable by ENABLE_TOOL_SEARCH.
+  // Read first: documented as not overridable by ENABLE_TOOL_SEARCH — but only
+  // where it reads as true. A value that reads as false turned nothing off, so
+  // it decides nothing and the read moves on. That is what the flag being a
+  // boolean means, and reading its presence instead told every machine that set
+  // it to `0` that it pays these tokens on every request.
   if (betas) {
-    return {
-      mode: 'loads-upfront',
-      thresholdShare: null,
-      variable: 'CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS',
-      value: betas,
-      source: null,
-      readFromMachine: true,
-    };
+    const reads = betasReads(betas);
+    if (reads !== 'off') {
+      return {
+        mode: reads === 'on' ? 'loads-upfront' : 'setting-unrecognized',
+        thresholdShare: null,
+        variable: 'CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS',
+        value: betas,
+        source: null,
+        readFromMachine: true,
+      };
+    }
   }
 
   const raw = env.ENABLE_TOOL_SEARCH?.trim();
@@ -382,6 +475,24 @@ export function resolveToolSearchSources(sources: ToolSearchSource[]): ResolvedT
   const holds = (s: ToolSearchSource, name: ToolSearchVar): boolean =>
     (s.vars[name] ?? '').trim() !== '' || (s.unreadable ?? []).includes(name);
 
+  // The managed settings file and the `managed-settings.d` drop-ins beside it
+  // are ONE tier — the vendor documents them as "merged together" — and it does
+  // not say which file inside that tier wins. The precedence walk below answers
+  // by array order, which is an answer this has no source for, so a tier that
+  // disagrees with itself is refused instead. Between tiers, precedence IS
+  // documented, and that walk is left alone.
+  const adminTier = sources.filter(
+    (s) => s.scope === 'managed-settings' || s.scope === 'managed-drop-in',
+  );
+  if (adminTier.length > 1) {
+    for (const name of TOOL_SEARCH_VARS) {
+      const held = adminTier.filter((s) => holds(s, name));
+      if (new Set(held.map((s) => (s.vars[name] ?? '').trim())).size > 1) {
+        return unresolved('sources-disagree', name);
+      }
+    }
+  }
+
   /**
    * The value that would win for one variable, or the fact that it cannot be
    * had: two places disagree, or the place that would win sets it to something
@@ -412,11 +523,46 @@ export function resolveToolSearchSources(sources: ToolSearchSource[]): ResolvedT
   // disagreement over a variable that would not have decided anything —
   // ANTHROPIC_BASE_URL behind an explicit ENABLE_TOOL_SEARCH — does not refuse
   // an answer the machine actually gives.
-  const betas = read('CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS');
-  if (betas === 'conflict') return unresolved('sources-disagree', 'CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS');
+  /**
+   * An organisation can keep tool search ON under the very variable that turns
+   * it off: "On Claude Code v2.1.227 or later, your organization can keep MCP
+   * tool search on under this variable through managed settings"
+   * (`code.claude.com/docs/en/llm-gateway-protocol.md`, read 2026-09-08). The
+   * client reads that override out of the administrator tier and never out of a
+   * shell, which is why this looks only there.
+   *
+   * The value that arms it is in no vendor document, so this does not name one
+   * and does not say what it does. What it can say is that the tier holds a
+   * value the vendor does not document — and while that is true, the disabling
+   * variable is not the thing deciding, so it is not read. The undocumented
+   * value is then refused by the ordinary rule below, which prints the variable,
+   * the value the reader wrote, and no claim.
+   *
+   * Reading the tier and discarding it is what this replaces: the value was
+   * already in hand, and the report printed the opposite of what such a machine
+   * does. Two of the override's conditions — a cloud provider, or a sign-in
+   * through a Claude apps gateway, either of which makes it inert — are not
+   * readable here, which is the other reason this refuses rather than claims.
+   */
+  const overriddenByAdminTier = adminTier.some((s) => {
+    const raw = (s.vars.ENABLE_TOOL_SEARCH ?? '').trim();
+    return (
+      raw !== '' && resolveToolSearch({ ENABLE_TOOL_SEARCH: raw }).mode === 'setting-unrecognized'
+    );
+  });
+
+  const betas = overriddenByAdminTier ? null : read('CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS');
+  if (betas === 'conflict')
+    return unresolved('sources-disagree', 'CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS');
   if (betas === 'unreadable')
     return unresolved('value-unreadable', 'CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS');
-  if (betas) {
+  // A value that reads as false must not be delegated. `resolveToolSearch` is
+  // called here with this variable ALONE, so delegating a value that decided
+  // nothing would answer out of an environment where ENABLE_TOOL_SEARCH is
+  // unset — turning a machine that had switched deferral off in a settings file
+  // into `defers-all`, a false claim in the costlier direction than the one
+  // being fixed. It falls through to the ENABLE_TOOL_SEARCH read instead.
+  if (betas && betasReads(betas.value) !== 'off') {
     return {
       ...resolveToolSearch({ CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: betas.value }),
       source: betas.source,
@@ -459,10 +605,10 @@ export function resolveToolSearchSources(sources: ToolSearchSource[]): ResolvedT
  * 2026-09-05 the run widened to every measured server and reached `postgres` at
  * 32 tokens on the wire, where 328 of its 348 Claude tokens *are* the overhead:
  * a per-server ratio of 10.88× that says nothing about converting bytes. Folded
- * into the band it took the published upper bound from 1.92× to 10.88× and made
+ * into the band it took the published upper bound to that same 10.88× and made
  * the audit refuse threshold questions it had been answering correctly. Held
- * apart, the band across the same 86 rows is 0.19×–1.93× — which is where it
- * already was, from a sample a quarter the size.
+ * apart, the widened run put the band back where a sample a quarter the size
+ * had already had it. The fields below are the record of what it is now.
  */
 export interface WireToClientRatio {
   low: number;
@@ -502,16 +648,12 @@ export const PUBLISHED_WIRE_TO_CLIENT_RATIO: WireToClientRatio = {
   // above/below verdict, and the count must never *exceed* the run, because
   // that would be a claim about servers nobody measured.
   //
-  // It read 20 from the day the run covered the top 20 until the run widened to
-  // every measured server on 2026-09-05, with nothing comparing the two. The
-  // band had not moved — the servers added sat inside it — which is exactly how
-  // a number like this goes wrong quietly.
-  //
-  // The widening then moved it by a hair rather than by the fivefold the first
-  // reading suggested: 0.20×–1.92× over 23 servers, 0.19×–1.93× over 86. That a
-  // quarter of the set predicted the whole of it is the interesting part, and it
-  // is only true of the marginal band — see the interface above for what folding
-  // the fixed overhead in did to the same numbers.
+  // The count is the half that goes wrong quietly: it read 20 from the day the
+  // run covered the top 20 until the run widened to every measured server on
+  // 2026-09-05, with nothing comparing the two. The band itself had not moved,
+  // because the servers added sat inside it — which is why the guard checks the
+  // two properties separately. The widening is described on the interface above;
+  // it is not restated here, for the reason the docblock gives.
   servers: 86,
   source: 'the published claude-opus-5 divergence run',
 };
@@ -568,6 +710,159 @@ export function bandSnapshotProblem(
   return null;
 }
 
+/**
+ * The passages on the vendor's own pages that this file's model of tool search
+ * rests on, and the rule for deciding whether they still say it.
+ *
+ * What rots here is not the client. It is these pages: the model is a reading
+ * of them, they have already moved host once under this project, and the whole
+ * of `resolveToolSearch` is downstream of four sentences. So the watch checks
+ * the sentences rather than a page hash — a hash of a documentation page is red
+ * every week for a typo and teaches everyone to ignore it.
+ *
+ * `tools/watch-tool-search-docs.ts` is the half that fetches. This half is the
+ * rule, offline and under test, the same split as `src/core/protocol.ts` and
+ * its spec watch.
+ */
+export interface ToolSearchDocClaim {
+  /** The page it was read from. */
+  url: string;
+  /** What this file does because of it, so a drift report says what broke. */
+  because: string;
+  /** Text that must still be on that page. Compared with whitespace collapsed. */
+  quote: string;
+}
+
+/** When every claim below was last read against the live page. */
+export const TOOL_SEARCH_DOC_READ_ON = '2026-09-08';
+
+export const ENV_VARS_DOC = 'https://code.claude.com/docs/en/env-vars.md';
+export const GATEWAY_DOC = 'https://code.claude.com/docs/en/llm-gateway-protocol.md';
+export const MANAGED_SETTINGS_DOC = 'https://code.claude.com/docs/en/managed-settings.md';
+
+export const TOOL_SEARCH_DOC_CLAIMS: ToolSearchDocClaim[] = [
+  {
+    url: ENV_VARS_DOC,
+    because:
+      'CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS is read as a boolean rather than as a marker whose presence is the signal',
+    quote: 'set `1` or `true` to turn it on and `0` or `false` to turn it off, in any casing',
+  },
+  {
+    url: ENV_VARS_DOC,
+    because:
+      'the variables that instead read any non-empty value are an enumerated exception, and this one is not among them',
+    quote: 'Some variables read only whether you set them at all',
+  },
+  {
+    url: GATEWAY_DOC,
+    because:
+      'an administrator tier holding an undocumented ENABLE_TOOL_SEARCH value stops the disabling variable deciding',
+    quote:
+      'your organization can keep [MCP tool search](/docs/en/mcp#scale-with-mcp-tool-search) on under this variable through [managed settings](/docs/en/managed-settings)',
+  },
+  {
+    url: GATEWAY_DOC,
+    because:
+      'the override is refused rather than answered, because two of its own conditions are not readable from a file',
+    quote: 'On a cloud provider, or signed in through a [Claude apps gateway]',
+  },
+  {
+    url: MANAGED_SETTINGS_DOC,
+    because:
+      'the managed file and its managed-settings.d drop-ins are read as one tier, and the Windows path is not the ProgramData one',
+    quote:
+      "Claude Code doesn't read the legacy Windows path `C:\\ProgramData\\ClaudeCode\\managed-settings.json`",
+  },
+];
+
+/**
+ * The variables that page names as reading any non-empty value, read on the date
+ * above. The one that matters is the one that is NOT here.
+ */
+export const ANY_NON_EMPTY_VARS = [
+  'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC',
+  'DISABLE_TELEMETRY',
+  'DISABLE_ERROR_REPORTING',
+  'CLAUDE_CODE_TMUX_TRUECOLOR',
+  'FALLBACK_FOR_ALL_PRIMARY_MODELS',
+  'IS_DEMO',
+];
+
+/** The intro the exception list hangs off, on the env-vars page. */
+const ANY_NON_EMPTY_INTRO = 'Some variables read only whether you set them at all';
+
+/**
+ * The variable names in that exception list, or null when the list could not be
+ * found in the shape this knows how to read — which is a reason to look, not a
+ * reason to report the list unchanged.
+ */
+export function anyNonEmptyVars(page: string): string[] | null {
+  const at = page.indexOf(ANY_NON_EMPTY_INTRO);
+  if (at < 0) return null;
+  const names: string[] = [];
+  for (const line of page.slice(at).split('\n').slice(1)) {
+    const bullet = /^\s*[*-]\s+`([A-Z0-9_]+)`\s*$/.exec(line);
+    if (bullet) {
+      if (bullet[1]) names.push(bullet[1]);
+      continue;
+    }
+    // Blank lines sit between the intro and its list; anything else ends it.
+    if (line.trim() !== '') break;
+  }
+  return names.length > 0 ? names : null;
+}
+
+/** A page too short to be the page asked for — an error body, or a redirect stub. */
+const SHORTEST_PLAUSIBLE_PAGE = 1_000;
+
+/**
+ * What is wrong with the live pages, in words. Empty means the model still has
+ * its sources.
+ *
+ * A page that could not be fetched is reported, never skipped: a watch that is
+ * green when it is blind is worse than no watch, which is the rule the spec
+ * watch is built on and the same one here.
+ */
+export function toolSearchDocProblems(pages: Map<string, string | null>): string[] {
+  const problems: string[] = [];
+  const flat = (s: string) => s.replace(/\s+/g, ' ').trim();
+
+  for (const url of new Set(TOOL_SEARCH_DOC_CLAIMS.map((c) => c.url))) {
+    const page = pages.get(url);
+    if (page === undefined || page === null) {
+      problems.push(`${url} could not be read, so nothing here was checked against it`);
+      continue;
+    }
+    if (page.length < SHORTEST_PLAUSIBLE_PAGE) {
+      problems.push(
+        `${url} came back as ${page.length} characters, too short to be that page — read as could not look, not as changed`,
+      );
+      continue;
+    }
+    const body = flat(page);
+    for (const claim of TOOL_SEARCH_DOC_CLAIMS.filter((c) => c.url === url)) {
+      if (!body.includes(flat(claim.quote))) {
+        problems.push(
+          `${url} no longer says "${claim.quote}" — the page this rests on moved: ${claim.because}`,
+        );
+      }
+    }
+    if (url === ENV_VARS_DOC) {
+      const listed = anyNonEmptyVars(page);
+      if (listed === null) {
+        problems.push(
+          `${url} still names an any-non-empty exception list, and it is no longer in a shape this can read — check by hand whether CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS has joined it`,
+        );
+      } else if (listed.includes('CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS')) {
+        problems.push(
+          `${url} now lists CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS among the variables that read any non-empty value — the boolean reading here is wrong and every value outside 1/true/yes/on is being read as leaving tool search on when it does not`,
+        );
+      }
+    }
+  }
+  return problems;
+}
+
 /** Derive the band from a supplied divergence run, falling back to the published one. */
 export function wireToClientRatio(run?: DivergenceRun | null): WireToClientRatio {
   if (!run) return PUBLISHED_WIRE_TO_CLIENT_RATIO;
@@ -575,7 +870,8 @@ export function wireToClientRatio(run?: DivergenceRun | null): WireToClientRatio
   // attached, minus the same request with none. An upper bound, and the only
   // measurement of it there is. A run that does not carry one converts as it
   // always did rather than guessing at a correction.
-  const fixedOverhead = typeof run.probeDelta === 'number' && run.probeDelta > 0 ? run.probeDelta : 0;
+  const fixedOverhead =
+    typeof run.probeDelta === 'number' && run.probeDelta > 0 ? run.probeDelta : 0;
   let low = Infinity;
   let high = -Infinity;
   let servers = 0;
@@ -590,13 +886,19 @@ export function wireToClientRatio(run?: DivergenceRun | null): WireToClientRatio
     servers++;
   }
   if (servers === 0) return PUBLISHED_WIRE_TO_CLIENT_RATIO;
-  return { low, high, fixedOverhead, servers, source: `the ${run.measuredAt} ${run.model} divergence run` };
+  return {
+    low,
+    high,
+    fixedOverhead,
+    servers,
+    source: `the ${run.measuredAt} ${run.model} divergence run`,
+  };
 }
 
 /** One measured server, as the deferral arithmetic needs it. */
 export interface DeferralServer {
   /** For naming the servers a verdict singles out; the arithmetic never reads it. */
-  name?: string;
+  name?: string | undefined;
   /** o200k tokens over the wire capture — the audit's own unit. */
   tokens: number;
   /**
@@ -605,13 +907,13 @@ export interface DeferralServer {
    * threshold — the documented `auto` mode counts "the tools it would
    * otherwise defer".
    */
-  alwaysLoad?: boolean;
+  alwaysLoad?: boolean | undefined;
   /**
    * Anthropic's own count for this server from a current divergence row, when
    * `--claude` supplied one. `null` means no current match, `undefined` means
    * the join was not requested — either way it is converted through the band.
    */
-  claudeTokens?: number | null;
+  claudeTokens?: number | null | undefined;
 }
 
 /**
@@ -705,6 +1007,12 @@ export interface DeferralVerdict {
   /** Conditions this cannot read, under which a deferring client pays in full. */
   exceptions: string[];
   /**
+   * What the client's vendor is on record as doing, where that is not Claude
+   * Code and a record exists. Null in every other mode, including the absence
+   * of a record, which is a different fact and is printed as one.
+   */
+  record: DeferralRecord | null;
+  /**
    * Servers in this scope pinned `alwaysLoad: true` in their entry, and their
    * wire tokens. Read from the config, so it is stated rather than listed as a
    * condition: whatever the mode, these load at session start.
@@ -713,17 +1021,148 @@ export interface DeferralVerdict {
 }
 
 /**
- * Clients this tool discovers that have no default deferral on record. Each
- * client's own MCP configuration page was read on the date config.ts gives
+ * What a vendor is on record as doing, for a client this audit cannot measure.
+ *
+ * Every line here is printed, so every line is written to be checked: the claim
+ * is the vendor's, the conditions are the ones the vendor's own record leaves
+ * open, and the sources carry the address and the date they were read at. What
+ * this type deliberately cannot express is a verdict. A record establishes what
+ * a vendor says or ships; nothing in it says what a session paid.
+ */
+export interface DeferralRecord {
+  /** The vendor's own name for the mechanism, so a reader can look it up. */
+  mechanism: string;
+  /** What the record establishes. Lines, wrapped for the report. */
+  states: string[];
+  /** Why the posture still cannot be read off the audited machine. */
+  notReadable: string[];
+  /** What the record leaves open — printed as conditions, never resolved. */
+  conditions: string[];
+  /** First-party sources, each with the date it was read. */
+  sources: string[];
+}
+
+/**
+ * Clients whose vendor is on record as deferring tool definitions.
+ *
+ * These three were printed as "no default deferral on record" until 2026-09-07,
+ * because the rule read each client's MCP configuration page and nothing else,
+ * and all three pages are silent. Silence on one page is not a denial: the
+ * vendors say it in a blog post, in staff replies on their own forum, and in
+ * merged pull requests and settings defaults in their own source. The rule that
+ * admits those is in METHODOLOGY §who-pays.
+ *
+ * None of this is a measurement, and the report says so in as many words. It
+ * also refuses the other tempting shortcut — reporting these stacks as deferred
+ * and therefore free — because what a session actually pays depends on
+ * conditions no config file on the audited machine states.
+ */
+const DEFERRAL_ON_RECORD = new Map<string, DeferralRecord>([
+  [
+    'cursor',
+    {
+      mechanism: 'dynamic context discovery',
+      states: [
+        'cursor is on record as deferring MCP tool definitions (dynamic context',
+        "discovery): the agent gets tool names, and a tool's description and input",
+        'schema load when it reaches for one. Cursor states it does not put every',
+        "attached tool's schema in every request.",
+      ],
+      notReadable: [
+        'No Cursor setting on record turns this on or off, and the MCP configuration',
+        'page does not mention the mechanism at all — so no Cursor config file states',
+        'a posture, and this audit has not measured one.',
+      ],
+      conditions: [
+        "definitions and tool results pulled in during a session stay in that session's history, so a deferring session is not a free one (Cursor staff, same post)",
+        "the vendor's own figure — 46.9% fewer total agent tokens — is an A/B result over runs that called an MCP tool, not a saving for this stack",
+        "Cursor's context tray is not a check on the number above either: staff describe its count as a calibrated estimate rather than a tokenizer count (forum.cursor.com/t/168744 post 5, 2026-08-20)",
+      ],
+      sources: [
+        'cursor.com/blog/dynamic-context-discovery, dated 2026-01-06, read 2026-09-07 — Cursor syncs MCP tool descriptions to a folder and sends the agent the names',
+        'forum.cursor.com/t/166405 post 5, a staff account, 2026-07-22, read 2026-09-07 — current Cursor uses dynamic context discovery for MCP',
+        'cursor.com/docs/context/mcp, read 2026-09-07 — silent on the mechanism, and offers no setting for it',
+      ],
+    },
+  ],
+  [
+    'codex',
+    {
+      mechanism: 'tool search',
+      states: [
+        'codex is on record as deferring MCP tool definitions (tool search): its',
+        'source defers every effective MCP tool behind a tool-search tool when the',
+        'model supports that tool and the provider supports namespaced tools, and',
+        'exposes them directly when either does not — which is the full total.',
+      ],
+      notReadable: [
+        'config.toml carries no switch for it. The two feature keys that once forced',
+        'the behaviour are marked removed and skipped when the features table is',
+        'applied, though both still appear in the published config schema.',
+      ],
+      conditions: [
+        'the model must support the search tool and the provider must support namespaced tools — both are read from the running session, not from config.toml, and this audit reads neither',
+        'an older or unsupported model/provider combination is served the definitions directly, and pays the total above in full',
+        'the deferral reached a stable release at rust-v0.142.2; a machine pinned below that tag is on the older rule, where tool search applied only above 100 tools or behind a feature flag',
+      ],
+      sources: [
+        'github.com/openai/codex/pull/29486, merged 2026-06-22, read 2026-09-07 — defer all effective MCP tools when tool search and namespaced tools are supported, and treat the old feature keys as removed',
+        'openai/codex tag rust-v0.142.2, published 2026-06-25, read 2026-09-07 — the first stable release carrying it',
+        "codex-rs/core/src/tools/spec_plan.rs at main, read 2026-09-07 — the condition is the model's support for the search tool AND the provider's for namespaced tools",
+        'codex-rs/features/src/lib.rs at main, read 2026-09-07 — tool_search and tool_search_always_defer_mcp_tools are Stage::Removed, and the config table skips them',
+      ],
+    },
+  ],
+  [
+    'vscode',
+    {
+      mechanism: "virtual tools, and the agent host's tool search",
+      states: [
+        'vscode ships two mechanisms that can defer tool definitions, and this is a',
+        'record of them rather than a verdict about your session. It documents a maximum',
+        'of 128 tools enabled per chat request, and virtual tools — grouped sets the model',
+        'activates on demand — above a threshold defaulting to 128, which its settings',
+        'reference states no ceiling for and offers as the way past that limit. Separately its',
+        'agent host defers MCP and non-core tools behind a tool-search tool, on by',
+        'default in source.',
+      ],
+      notReadable: [
+        "Both switches live in VS Code's own settings, not in the .vscode/mcp.json",
+        "this audit reads. The agent host's pair is in no published settings",
+        'documentation; the virtual-tools threshold is, as experimental (2026-09-09).',
+        'So no file read here states a posture, and none of it has been measured.',
+      ],
+      conditions: [
+        'virtual tools group only above the threshold: at or below 128 tools nothing documented defers, and the cap itself is an error rather than a saving',
+        "the agent host's tool search is gated on the model — the GPT-5.4, 5.5 and 5.6 families, and Claude 4.5 or later",
+        'which VS Code release runs Copilot sessions on that agent host by default is not established here, so whether the source default reaches a given install is unknown',
+      ],
+      sources: [
+        'code.visualstudio.com agent tools documentation, read 2026-09-09 — "a maximum of 128 tools enabled at a time", with the virtual-tools threshold offered as the remedy',
+        'code.visualstudio.com AI settings reference, read 2026-09-09 — github.copilot.chat.virtualTools.threshold, experimental, default 128, "go beyond the limit of 128 tools for a chat request"',
+        'microsoft/vscode src/vs/platform/agentHost/common/copilotCliConfig.ts at main, read 2026-09-07 — chat.agentHost.copilot.toolSearch.enabled defaults true, its deferThreshold to 1',
+        'microsoft/vscode src/vs/platform/agentHost/node/copilot/toolSearchDeferral.ts at main, read 2026-09-07 — the model allowlist',
+        'github.com/microsoft/vscode/pull/326213, merged 2026-07-23, read 2026-09-07 — the change that added it',
+      ],
+    },
+  ],
+]);
+
+/**
+ * Clients this tool discovers with no default deferral on record.
+ *
+ * Each client's own MCP configuration page was read on the date config.ts gives
  * and says nothing about deferring tool definitions — Windsurf's states a cap
- * of 100 tools, which is a different thing and not a deferral.
+ * of 100 tools, which is a different thing and not a deferral. Since 2026-09-07
+ * the record is wider than that page (see `DEFERRAL_ON_RECORD`), so this is an
+ * absence that was searched for and not only an absence on one page: Gemini
+ * CLI, Zed and Goose are open source and were searched that day for a
+ * tool-search or deferral mechanism, with nothing found. Claude Desktop,
+ * Windsurf and Kiro are closed, and only their pages have been read.
  */
 const NO_DEFERRAL_ON_RECORD = new Set([
   'claude-desktop',
-  'cursor',
-  'vscode',
   'windsurf',
-  'codex',
   'gemini',
   'zed',
   'kiro',
@@ -785,16 +1224,16 @@ export function evaluateDeferral(
   opts: {
     contextWindow: number;
     /** The audited machine's SHELL variables. Omitted means the shell set nothing. */
-    env?: ToolSearchEnv;
+    env?: ToolSearchEnv | undefined;
     /**
      * The Claude Code settings files read on that machine, highest precedence
      * first — the other place these variables come from. Omitted means they
      * were not read here, which is published as such rather than as an absence
      * of settings: see `ToolSearchSetting.sources`.
      */
-    settings?: ToolSearchSource[];
+    settings?: ToolSearchSource[] | undefined;
     /** Supplied by `--claude`; sharpens the unit conversion where rows match. */
-    divergence?: DivergenceRun | null;
+    divergence?: DivergenceRun | null | undefined;
   },
 ): DeferralVerdict {
   const wireTokens = scope.servers.reduce((a, s) => a + s.tokens, 0);
@@ -829,10 +1268,17 @@ export function evaluateDeferral(
     distanceTokens: null,
     crosses: null,
     exceptions: [],
+    record: null,
     alwaysLoad,
   };
 
   if (scope.client !== 'claude-code') {
+    const record = DEFERRAL_ON_RECORD.get(scope.client);
+    // Three answers, not two. A vendor's record is not a measurement, so it
+    // does not become a posture — it becomes a printed record with the
+    // conditions it leaves open, and `crosses` stays null as it does for the
+    // clients nothing is on record about.
+    if (record) return { ...base, mode: 'deferral-on-record', mechanism: record.mechanism, record };
     return {
       ...base,
       mode: NO_DEFERRAL_ON_RECORD.has(scope.client) ? 'no-deferral-on-record' : 'client-unknown',
@@ -920,7 +1366,10 @@ export function evaluateDeferral(
     thresholdTokens,
     clientTokens,
     ratio,
-    distanceTokens: { low: clientTokens.low - thresholdTokens, high: clientTokens.high - thresholdTokens },
+    distanceTokens: {
+      low: clientTokens.low - thresholdTokens,
+      high: clientTokens.high - thresholdTokens,
+    },
     crosses,
     exceptions: EXCEPTIONS,
   };

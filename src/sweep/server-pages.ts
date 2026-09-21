@@ -9,12 +9,19 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { parse } from 'yaml';
 import type { Measurement } from '../core/types.js';
 import { bandColor, BAND_META } from '../core/bands.js';
 import { deprecationText, loadDivergence, mdCell, type ServerEntry } from './report.js';
 import { parseHistory, plottableSeries, type HistoryRow } from './history.js';
-import { claudeRatio, fieldSelectionShare, isCurrent, type DivergenceRow, type DivergenceRun } from '../core/divergence.js';
+import { signed } from '../core/format.js';
+import {
+  claudeRatio,
+  fieldSelectionShare,
+  isCurrent,
+  mappedTokens,
+  type DivergenceRow,
+  type DivergenceRun,
+} from '../core/divergence.js';
 
 /**
  * Pages are served from GitHub Pages (docs/), but results/ and badges/ are not
@@ -31,14 +38,31 @@ const fmt = (n: number) => n.toLocaleString('en-US');
 
 /** True when a measurement produced a number we can stand behind. */
 function isMeasured(m: Measurement | null): m is Measurement {
-  return !!m && (m.status === 'measured' || m.status === 'dynamic') && typeof m.totalTokens === 'number';
+  return (
+    !!m && (m.status === 'measured' || m.status === 'dynamic') && typeof m.totalTokens === 'number'
+  );
 }
 
+/**
+ * The conditions a number was made under, including the machine.
+ *
+ * `isolation.arch` has been recorded since 0.12.0 and was rendered nowhere, so
+ * a reader could see the image and the network a measurement ran under but not
+ * the architecture — the one condition that decides whether a package could run
+ * at all. `local-mcp` is why the field exists: it was published as a broken
+ * server on the strength of a run whose real finding was the machine.
+ *
+ * Absent is printed as "architecture not on record" rather than omitted,
+ * because the record's own rule is that absent means unknown and never "the
+ * same as yours". Thirty-two of the published records predate the field and
+ * will say so until the rotation re-measures them.
+ */
 function isolationText(m: Measurement): string {
   const iso = m.isolation;
   if (!iso) return 'not recorded';
-  if (!iso.docker) return 'host process (no container)';
-  return ['docker', iso.image, iso.network ? `network ${iso.network}` : '', iso.note]
+  const arch = iso.arch ?? 'architecture not on record';
+  if (!iso.docker) return `host process (no container) · ${arch}`;
+  return ['docker', iso.image, iso.network ? `network ${iso.network}` : '', arch, iso.note]
     .filter(Boolean)
     .join(' · ');
 }
@@ -61,7 +85,9 @@ function divergenceSection(row: DivergenceRow, run: DivergenceRun): string[] {
   md.push('');
   md.push('| | tokens | |');
   md.push('|---|---:|---|');
-  md.push(`| o200k, full capture | ${fmt(row.o200kFull)} | the badge number — every byte \`tools/list\` returned |`);
+  md.push(
+    `| o200k, full capture | ${fmt(row.o200kFull)} | the badge number — every byte \`tools/list\` returned |`,
+  );
   md.push(
     `| o200k, Anthropic fields only | ${fmt(row.o200kMapped)} | ` +
       `${share === null ? '—' : `${(share * 100).toFixed(1)}% of the capture is MCP-only metadata`} |`,
@@ -92,7 +118,11 @@ export function renderServerPage(
 ): string {
   const total = m.totalTokens as number;
   const band = BAND_META[bandColor(total)];
-  const tools = [...m.tools].sort((a, b) => b.tokens - a.tokens);
+  const headlineRow = divergence?.servers[entry.name];
+  const claudeOfThisPage = isCurrent(headlineRow, m.canonicalSha256)
+    ? headlineRow.claudeDelta
+    : null;
+  const tools = m.tools.toSorted((a, b) => b.tokens - a.tokens);
   const shown = tools.slice(0, MAX_TOOL_ROWS);
   const pct = (n: number) => (total > 0 ? `${((n / total) * 100).toFixed(1)}%` : '—');
 
@@ -100,13 +130,35 @@ export function renderServerPage(
   md.push(`# ${mdCell(entry.name)} — context cost`);
   md.push('');
   md.push(
-    `**${fmt(total)} tokens** across ${m.toolCount} tools — *${band.label}* (${band.range}). ` +
+    `**${fmt(total)} tokens** across ${m.toolCount} tools — *${band?.label}* (${band?.range}). ` +
       `Measured ${String(m.measuredAt).slice(0, 10)} under [methodology v${mdCell(m.methodologyVersion)}](../METHODOLOGY.html).`,
+  );
+  md.push('');
+  /**
+   * The other two numbers, in the first thing a reader sees. This page is the
+   * badge's click-through target, and the badge states the wire figure alone —
+   * so a reader arriving here to find out what a server costs them was being
+   * shown the largest of the three and left to scroll for the other two.
+   *
+   * `mapped` is recomputed from the capture on this page rather than read from
+   * the divergence row, so it prints for every measured server including ones
+   * the run has never reached. Only the Claude figure can be absent, and it
+   * says so in words rather than printing a dash into a sentence.
+   */
+  md.push(
+    `An Anthropic request carries ${fmt(mappedTokens(m.rawToolsCapture ?? []))} of those tokens as tool ` +
+      `definitions` +
+      (claudeOfThisPage === null
+        ? `. What Claude makes of them is not published for this server: its Claude count is missing, or was taken ` +
+          `against a capture this measurement has since replaced.`
+        : `, and Claude counts those at **${fmt(claudeOfThisPage)}**.`),
   );
   md.push('');
   md.push('| | |');
   md.push('|---|---|');
-  md.push(`| server (self-reported) | ${mdCell(m.serverName)}${m.serverVersion ? ` v${mdCell(String(m.serverVersion).replace(/^v/, ''))}` : ''} |`);
+  md.push(
+    `| server (self-reported) | ${mdCell(m.serverName)}${m.serverVersion ? ` v${mdCell(String(m.serverVersion).replace(/^v/, ''))}` : ''} |`,
+  );
   md.push(`| status | ${mdCell(m.status)} |`);
   // A reader who arrives here from a badge sees this page and not the
   // leaderboard, so the deprecation has to be on it too — beside the status,
@@ -115,14 +167,27 @@ export function renderServerPage(
   md.push(`| tokenizer | ${mdCell(m.provider)} / ${mdCell(m.encoding)} |`);
   md.push(`| launch command | \`${mdCell(m.launchCommand ?? entry.command)}\` |`);
   md.push(`| isolation | ${mdCell(isolationText(m))} |`);
-  md.push(`| env vars supplied | ${m.envVarNames?.length ? m.envVarNames.map(mdCell).join(', ') : 'none'} |`);
+  md.push(
+    `| env vars supplied | ${m.envVarNames?.length ? m.envVarNames.map(mdCell).join(', ') : 'none'} |`,
+  );
   md.push(`| canonical SHA-256 | \`${mdCell(m.canonicalSha256)}\` |`);
   if (entry.category) md.push(`| category | ${mdCell(entry.category)} |`);
   if (entry.repo) md.push(`| source | ${mdCell(entry.repo)} |`);
+  // The page already names the package, the launch command and the repo, so a
+  // reader who reads it can tell which project this is. This row is for the
+  // reader who arrives from a badge, sees a familiar name in the heading, and
+  // has no reason to suspect there are two — which is the person the collision
+  // actually caught.
+  if (entry.nameCollision) {
+    md.push(
+      `| not to be confused with | ${mdCell(entry.nameCollision.project)} ` +
+        `(${mdCell(entry.nameCollision.source)}, read ${mdCell(entry.nameCollision.readOn)}) — an unrelated project of the same name, not measured here |`,
+    );
+  }
   md.push('');
   if (m.status === 'dynamic') {
     md.push(
-      '> This server\'s `tools/list` differed between two consecutive captures, so the number ' +
+      "> This server's `tools/list` differed between two consecutive captures, so the number " +
         'is the first capture and moves between sweeps. Treat it as a range, not a constant.',
     );
     md.push('');
@@ -130,11 +195,23 @@ export function renderServerPage(
 
   md.push('## Where the tokens are');
   md.push('');
-  md.push('| tool | tokens | share | description | schema |');
-  md.push('|---|---:|---:|---:|---:|');
+  // The output-schema column appears only on pages that have one. It is the
+  // field most likely to explain an expensive tool — about a sixth of every
+  // published token across the set, and the largest thing the breakdown used to
+  // leave unnamed — but only a third of measured servers ship one, and a column
+  // of zeroes on the rest would cost every reader something to tell them
+  // nothing. `annotations` is recorded per tool for the same reason and
+  // deliberately gets no column: at roughly 3% of the set it almost never
+  // explains a row, and it is in the measurement file for anyone who looks.
+  const hasOutput = shown.some((t) => (t.outputSchemaTokens ?? 0) > 0);
+  md.push(
+    `| tool | tokens | share | description | input schema |${hasOutput ? ' output schema |' : ''}`,
+  );
+  md.push(`|---|---:|---:|---:|---:|${hasOutput ? '---:|' : ''}`);
   for (const t of shown) {
     md.push(
-      `| ${mdCell(t.name)} | ${fmt(t.tokens)} | ${pct(t.tokens)} | ${fmt(t.descriptionTokens)} | ${fmt(t.inputSchemaTokens)} |`,
+      `| ${mdCell(t.name)} | ${fmt(t.tokens)} | ${pct(t.tokens)} | ${fmt(t.descriptionTokens)} | ${fmt(t.inputSchemaTokens)} |` +
+        (hasOutput ? ` ${fmt(t.outputSchemaTokens ?? 0)} |` : ''),
     );
   }
   md.push('');
@@ -170,7 +247,8 @@ export function renderServerPage(
     md.push('|---|---:|---:|---|---|---:|');
     history.forEach((h, i) => {
       const prev = history[i - 1];
-      const comparable = prev && (!prev.isolation || !h.isolation || prev.isolation === h.isolation);
+      const comparable =
+        prev && (!prev.isolation || !h.isolation || prev.isolation === h.isolation);
       const delta = prev && comparable ? h.tokens - prev.tokens : null;
       const change = !prev
         ? '—'
@@ -178,7 +256,7 @@ export function renderServerPage(
           ? 'not comparable'
           : delta === 0
             ? 'no change'
-            : `${delta! > 0 ? '+' : ''}${fmt(delta!)}`;
+            : signed(delta!);
       md.push(
         `| ${mdCell(h.date)} | ${fmt(h.tokens)} | ${h.toolCount} | ` +
           // Same rule as the isolation cell beside it: what the row does not
@@ -231,9 +309,20 @@ export function renderServerPage(
   return md.join('\n');
 }
 
-/** The index that lists every candidate — measured ones link to their page. */
-export function renderServerIndex(rows: { entry: ServerEntry; m: Measurement | null }[]): string {
-  const measured = rows.filter((r) => isMeasured(r.m)).sort((a, b) => (b.m!.totalTokens as number) - (a.m!.totalTokens as number));
+/**
+ * The index that lists every candidate — measured ones link to their page.
+ *
+ * `divergence` is optional because the index is still a truthful list without
+ * it: the wire and mapped columns come from the capture alone, and only the
+ * Claude column needs the run.
+ */
+export function renderServerIndex(
+  rows: { entry: ServerEntry; m: Measurement | null }[],
+  divergence: DivergenceRun | null = null,
+): string {
+  const measured = rows
+    .filter((r) => isMeasured(r.m))
+    .toSorted((a, b) => (b.m!.totalTokens as number) - (a.m!.totalTokens as number));
   const rest = rows.filter((r) => !isMeasured(r.m));
 
   const md: string[] = [];
@@ -242,16 +331,22 @@ export function renderServerIndex(rows: { entry: ServerEntry; m: Measurement | n
   md.push(
     `One page per measured server: the per-tool breakdown behind the badge, the exact launch ` +
       `command, and the command that re-derives the number. ${measured.length} of ${rows.length} ` +
-      `candidates measured.`,
+      `candidates measured. **Ranked on the wire** — every byte \`tools/list\` returned, which is ` +
+      `what the badge states. *mapped* is the part an Anthropic request carries; *Claude* is that ` +
+      `part counted by Anthropic, and prints \`—\` where it is missing or was taken against a ` +
+      `capture that has since moved.`,
   );
   md.push('');
-  md.push('| # | server | tokens | tools | band |');
-  md.push('|---:|---|---:|---:|---|');
+  md.push('| # | server | wire | mapped | Claude | tools | band |');
+  md.push('|---:|---|---:|---:|---:|---:|---|');
   measured.forEach((r, i) => {
     const t = r.m!.totalTokens as number;
+    const row = divergence?.servers[r.entry.name];
+    const claude = isCurrent(row, r.m!.canonicalSha256) ? row.claudeDelta : null;
     md.push(
       `| ${i + 1} | [${mdCell(r.entry.name)}](${encodeURIComponent(r.entry.name)}.html) | ${fmt(t)} | ` +
-        `${r.m!.toolCount} | ${BAND_META[bandColor(t)].label} |`,
+        `${fmt(mappedTokens(r.m!.rawToolsCapture ?? []))} | ${claude === null ? '—' : fmt(claude)} | ` +
+        `${r.m!.toolCount} | ${BAND_META[bandColor(t)]!.label} |`,
     );
   });
   md.push('');
@@ -268,7 +363,9 @@ export function renderServerIndex(rows: { entry: ServerEntry; m: Measurement | n
     }
     md.push('');
   }
-  md.push(`[Leaderboard](${BLOB}/results/leaderboard.md) · [Methodology](../METHODOLOGY.html) · [Dashboard](../dashboard.html)`);
+  md.push(
+    `[Leaderboard](${BLOB}/results/leaderboard.md) · [Methodology](../METHODOLOGY.html) · [Dashboard](../dashboard.html)`,
+  );
   md.push('');
   return md.join('\n');
 }
@@ -300,11 +397,11 @@ export function writeServerPages(entries: ServerEntry[], root = process.cwd()): 
     if (!isMeasured(m)) continue;
     const series = history
       .filter((h) => h.server === entry.name)
-      .sort((a, b) => a.date.localeCompare(b.date));
+      .toSorted((a, b) => a.date.localeCompare(b.date));
     writeFileSync(join(outDir, `${entry.name}.md`), renderServerPage(entry, m, series, divergence));
     pages++;
   }
-  writeFileSync(join(outDir, 'index.md'), renderServerIndex(rows));
+  writeFileSync(join(outDir, 'index.md'), renderServerIndex(rows, divergence));
   return { pages };
 }
 

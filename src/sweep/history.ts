@@ -83,11 +83,14 @@ export function parseHistory(text: string): HistoryRow[] {
     const [date, server, tokens, toolCount, status, isolation, version] = splitCsvLine(line);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? '') || !server) continue;
     if (!/^\d+$/.test(tokens ?? '') || !/^\d+$/.test(toolCount ?? '')) continue;
-    // A short row is an earlier write — 5 fields predate `isolation`, 6 predate
-    // `version`. Both are recorded as unknown rather than back-filled with a
-    // guess, which is the same rule the columns themselves exist to keep.
+    // A missing `isolation` or `version` is an earlier write, not a value: both
+    // columns were added after rows already existed. They are read as unknown
+    // rather than back-filled with a guess, which is the same rule the columns
+    // themselves exist to keep. A row short of seven fields predates them both
+    // and reads the same way; none is left in `history.csv`, and the destructure
+    // costs nothing to keep honest about one arriving from an older checkout.
     rows.push({
-      date,
+      date: date!, // established by the ISO-date test above
       server,
       tokens: Number(tokens),
       toolCount: Number(toolCount),
@@ -100,7 +103,9 @@ export function parseHistory(text: string): HistoryRow[] {
 }
 
 export function formatHistory(rows: HistoryRow[]): string {
-  const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date) || a.server.localeCompare(b.server));
+  const sorted = rows.toSorted(
+    (a, b) => a.date.localeCompare(b.date) || a.server.localeCompare(b.server),
+  );
   const lines = sorted.map((r) =>
     [
       csvCell(r.date),
@@ -166,7 +171,7 @@ export function appendHistory(root = process.cwd()): { rows: number; added: numb
   for (const server of readdirSync(resultsDir, { withFileTypes: true })
     .filter((d) => d.isDirectory())
     .map((d) => d.name)
-    .sort()) {
+    .toSorted()) {
     const file = join(resultsDir, server, 'measurement.json');
     if (!existsSync(file)) continue;
     let m: Measurement;
@@ -205,7 +210,7 @@ export interface PlottableSeries {
  * series recorded before this column existed.
  */
 export function plottableSeries(rows: HistoryRow[]): PlottableSeries {
-  const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date));
+  const sorted = rows.toSorted((a, b) => a.date.localeCompare(b.date));
   if (!sorted.length) return { rows: [], dropped: 0, conditionsUnknown: false };
   const current = sorted[sorted.length - 1]!.isolation;
   let start = 0;

@@ -30,8 +30,8 @@
  * name) are held to the same rule: sent with the request, never reported —
  * only `headerNames` is.
  */
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { parse as parseToml } from 'smol-toml';
 import { parse as parseYaml } from 'yaml';
 import {
@@ -41,6 +41,7 @@ import {
   type ToolSearchSource,
   type ToolSearchVar,
 } from './deferral.js';
+import { extractSourcePolicy } from './mcp-policy.js';
 
 export interface ConfiguredServer {
   name: string;
@@ -50,25 +51,25 @@ export interface ConfiguredServer {
   source: string;
   transport: 'stdio' | 'remote';
   /** Display form of the launch command (argv joined) — stdio only. */
-  command?: string;
+  command?: string | undefined;
   /** Exact argv, so paths containing spaces survive round-tripping. */
-  argv?: string[];
+  argv?: string[] | undefined;
   envVarNames: string[];
   /** Values, needed to spawn the server. NEVER serialize this. */
-  env?: Record<string, string>;
+  env?: Record<string, string> | undefined;
   /** Remote endpoint — probed, then measured through the bridge or reported as walled. */
-  url?: string;
+  url?: string | undefined;
   /** Names only — a remote entry's header values never enter a report. Absent means none. */
-  headerNames?: string[];
+  headerNames?: string[] | undefined;
   /** Values, sent with the probe and the bridge. NEVER serialize this. */
-  headers?: Record<string, string>;
+  headers?: Record<string, string> | undefined;
   /**
    * Claude Code's `alwaysLoad: true`: this server's tools load at session
    * start whatever the tool-search setting says (its MCP documentation, §"Exempt
    * a server from deferral", read 2026-09-06). Read from the entry, so the
    * deferral verdict can count it rather than list it as a condition.
    */
-  alwaysLoad?: true;
+  alwaysLoad?: true | undefined;
 }
 
 /**
@@ -90,7 +91,7 @@ export function parseJsonc(text: string): unknown {
   };
 
   for (let i = 0; i < text.length; i++) {
-    const c = text[i];
+    const c = text[i]!; // the loop condition establishes it
     const n = text[i + 1];
 
     if (inString) {
@@ -191,7 +192,7 @@ function collectHeaders(
     const token = processEnv[raw.bearer_token_env_var];
     if (token !== undefined) values.Authorization = `Bearer ${token}`;
   }
-  return { names: [...names].sort(), values };
+  return { names: [...names].toSorted(), values };
 }
 
 function toServer(
@@ -206,7 +207,7 @@ function toServer(
   for (const [k, v] of Object.entries(raw.env ?? raw.envs ?? {})) {
     if (typeof v === 'string') env[k] = v;
   }
-  const envVarNames = Object.keys(env).sort();
+  const envVarNames = Object.keys(env).toSorted();
   const pinned = raw.alwaysLoad === true ? { alwaysLoad: true as const } : {};
 
   const command = firstString(raw.command, raw.cmd);
@@ -227,7 +228,9 @@ function toServer(
   }
   if (!command) return null;
 
-  const args = Array.isArray(raw.args) ? raw.args.filter((a): a is string => typeof a === 'string') : [];
+  const args = Array.isArray(raw.args)
+    ? raw.args.filter((a): a is string => typeof a === 'string')
+    : [];
   const argv = [command, ...args];
   return {
     name,
@@ -286,12 +289,14 @@ export function extractDeclaration(
   // when a server is toggled off in its /mcp panel (both read 2026-09-06).
   const listedOff = new Set<string>();
   const mcp = d.mcp;
-  if (mcp && typeof mcp === 'object') for (const n of stringList((mcp as Record<string, unknown>).excluded)) listedOff.add(n);
+  if (mcp && typeof mcp === 'object')
+    for (const n of stringList((mcp as Record<string, unknown>).excluded)) listedOff.add(n);
   const project =
     meta.cwd && d.projects && typeof d.projects === 'object'
       ? ((d.projects as Record<string, unknown>)[meta.cwd] as Record<string, unknown> | undefined)
       : undefined;
-  if (project && typeof project === 'object') for (const n of stringList(project.disabledMcpServers)) listedOff.add(n);
+  if (project && typeof project === 'object')
+    for (const n of stringList(project.disabledMcpServers)) listedOff.add(n);
 
   const addBlock = (block: unknown, launchable: (raw: RawEntry) => boolean = () => true) => {
     if (!block || typeof block !== 'object') return;
@@ -327,7 +332,7 @@ export function extractDeclaration(
   const servers = out.filter((s) => (seen.has(s.name) ? false : (seen.add(s.name), true)));
   // A name that is off in one block and live in another is a live server, not a
   // switched-off one, so it is not reported as both.
-  const disabled = [...new Set(off.filter((n) => !seen.has(n)))].sort();
+  const disabled = [...new Set(off.filter((n) => !seen.has(n)))].toSorted();
   return { servers, disabled };
 }
 
@@ -336,6 +341,8 @@ export interface ConfigCandidate {
   path: string;
   /** How the file is written. Absent means JSON, with comments and trailing commas tolerated. */
   format?: 'json' | 'toml' | 'yaml';
+  /** Set on the managed MCP file, whose presence changes what a session loads. */
+  managed?: true;
 }
 
 /** Every place a client config is known to live, whether or not it exists. */
@@ -343,14 +350,18 @@ export function configCandidates(env: {
   home: string;
   cwd: string;
   platform: NodeJS.Platform;
-  appData?: string;
+  appData?: string | undefined;
 }): ConfigCandidate[] {
   const { home, cwd, platform } = env;
   const desktop =
     platform === 'darwin'
       ? join(home, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json')
       : platform === 'win32'
-        ? join(env.appData ?? join(home, 'AppData', 'Roaming'), 'Claude', 'claude_desktop_config.json')
+        ? join(
+            env.appData ?? join(home, 'AppData', 'Roaming'),
+            'Claude',
+            'claude_desktop_config.json',
+          )
         : join(home, '.config', 'Claude', 'claude_desktop_config.json');
 
   // Paths each client's own documentation gives, read 2026-09-06. Zed's user
@@ -374,7 +385,9 @@ export function configCandidates(env: {
     { client: 'codex', path: join(cwd, '.codex', 'config.toml'), format: 'toml' },
     { client: 'gemini', path: join(home, '.gemini', 'settings.json') },
     { client: 'gemini', path: join(cwd, '.gemini', 'settings.json') },
-    ...(platform === 'win32' ? [] : [{ client: 'zed', path: join(home, '.config', 'zed', 'settings.json') }]),
+    ...(platform === 'win32'
+      ? []
+      : [{ client: 'zed', path: join(home, '.config', 'zed', 'settings.json') }]),
     { client: 'zed', path: join(cwd, '.zed', 'settings.json') },
     { client: 'kiro', path: join(home, '.kiro', 'settings', 'mcp.json') },
     { client: 'kiro', path: join(cwd, '.kiro', 'settings', 'mcp.json') },
@@ -392,6 +405,8 @@ export function parseConfigText(text: string, format: ConfigCandidate['format'] 
 export interface LoadedConfig {
   client: string;
   source: string;
+  /** Carried from the candidate: this is the managed MCP file (see managedMcpPath). */
+  managed?: true;
   servers: ConfiguredServer[];
   /** Set when the file exists but could not be read/parsed. */
   error?: string;
@@ -432,7 +447,12 @@ export function loadConfigs(
     seen.add(c.path);
     try {
       const doc = parseConfigText(readFileSync(c.path, 'utf8'), c.format);
-      const { servers, disabled } = extractDeclaration(doc, { client: c.client, source: c.path, cwd, env: processEnv });
+      const { servers, disabled } = extractDeclaration(doc, {
+        client: c.client,
+        source: c.path,
+        cwd,
+        env: processEnv,
+      });
       // A config with no MCP block at all (e.g. a ~/.claude.json holding only
       // session history) is not worth a line in the report — it has no total.
       // It is still worth carrying: it is the evidence that a client is on this
@@ -442,18 +462,79 @@ export function loadConfigs(
         // that, not as one declaring nothing: the second is a claim about the
         // file that the file itself contradicts.
         if (disabled.length) {
-          out.push({ client: c.client, source: c.path, servers: [], allDisabled: disabled });
+          out.push({
+            client: c.client,
+            source: c.path,
+            ...(c.managed ? { managed: true as const } : {}),
+            servers: [],
+            allDisabled: disabled,
+          });
           continue;
         }
-        out.push({ client: c.client, source: c.path, servers: [], declaresNothing: true });
+        out.push({
+          client: c.client,
+          source: c.path,
+          ...(c.managed ? { managed: true as const } : {}),
+          servers: [],
+          declaresNothing: true,
+        });
         continue;
       }
-      out.push({ client: c.client, source: c.path, servers });
+      out.push({
+        client: c.client,
+        source: c.path,
+        ...(c.managed ? { managed: true as const } : {}),
+        servers,
+      });
     } catch (e) {
-      out.push({ client: c.client, source: c.path, servers: [], error: (e as Error).message });
+      out.push({
+        client: c.client,
+        source: c.path,
+        ...(c.managed ? { managed: true as const } : {}),
+        servers: [],
+        error: (e as Error).message,
+      });
     }
   }
   return out;
+}
+
+/**
+ * Where Claude Code looks for the managed MCP file: one fixed path per
+ * platform, in the same system directory as `managed-settings.json` — and,
+ * unlike that file, with no drop-in directory: the vendor documents a single
+ * standalone file that "cannot be delivered through server-managed settings".
+ * When it exists, a claude-code session loads only the servers it defines
+ * (plus in-process servers the launching app registers, which no config file
+ * describes). code.claude.com/docs/en/managed-mcp.md, §Exclusive control with
+ * managed-mcp.json, read **2026-09-09**.
+ */
+export function managedMcpPath(platform: NodeJS.Platform): string {
+  return platform === 'darwin'
+    ? '/Library/Application Support/ClaudeCode/managed-mcp.json'
+    : platform === 'win32'
+      ? 'C:\\Program Files\\ClaudeCode\\managed-mcp.json'
+      : '/etc/claude-code/managed-mcp.json';
+}
+
+/**
+ * The candidate list with the managed MCP file spliced in ahead of the
+ * claude-code user and project configs, so the file that decides what a
+ * session loads is read — and reported — before the files it can suppress.
+ */
+export function withManagedMcpCandidate(
+  candidates: ConfigCandidate[],
+  platform: NodeJS.Platform,
+): ConfigCandidate[] {
+  const managed: ConfigCandidate = {
+    client: 'claude-code',
+    path: managedMcpPath(platform),
+    managed: true,
+  };
+  const at = candidates.findIndex((c) => c.client === 'claude-code');
+  return at < 0
+    ? [...candidates, managed]
+    : [...candidates.slice(0, at), managed, ...candidates.slice(at)];
 }
 
 /** One file Claude Code reads its `env` block from. */
@@ -474,19 +555,30 @@ export interface SettingsCandidate {
  * Order is Claude Code's documented settings precedence (enterprise managed
  * policy, then project-local, then project, then user), read 2026-08-20. Paths
  * in, candidates out — nothing here touches a disk.
+ *
+ * The Windows directory is `C:\Program Files\ClaudeCode`, not `%ProgramData%`.
+ * `code.claude.com/docs/en/managed-settings.md`, read 2026-09-08, names the
+ * system directory per platform and then says in as many words: "Claude Code
+ * doesn't read the legacy Windows path
+ * `C:\ProgramData\ClaudeCode\managed-settings.json`". This opened that legacy
+ * path and no other, so on a managed Windows machine it read a file that
+ * decides nothing and never opened the one that does.
+ *
+ * Not modelled, and named here so the gap is on record rather than implied:
+ * WSL can be told to inherit the Windows policy chain, and whether it does
+ * turns on a key in a file this may not have read.
  */
 export function settingsCandidates(env: {
   home: string;
   cwd: string;
   platform: NodeJS.Platform;
-  programData?: string;
 }): SettingsCandidate[] {
   const { home, cwd, platform } = env;
   const managed =
     platform === 'darwin'
       ? '/Library/Application Support/ClaudeCode/managed-settings.json'
       : platform === 'win32'
-        ? join(env.programData ?? 'C:\\ProgramData', 'ClaudeCode', 'managed-settings.json')
+        ? 'C:\\Program Files\\ClaudeCode\\managed-settings.json'
         : '/etc/claude-code/managed-settings.json';
 
   return [
@@ -495,6 +587,42 @@ export function settingsCandidates(env: {
     { scope: 'project-settings', path: join(cwd, '.claude', 'settings.json') },
     { scope: 'user-settings', path: join(home, '.claude', 'settings.json') },
   ];
+}
+
+/**
+ * The `managed-settings.d/*.json` drop-ins beside the managed settings file.
+ *
+ * `code.claude.com/docs/en/managed-settings.md`, read 2026-09-08: the file
+ * source is "`managed-settings.d/*.json` and `managed-settings.json` merged
+ * together" in the same system directory — one tier, not two. Reading only
+ * `managed-settings.json` is the same shape of miss as reading only the shell
+ * was: a place the client takes these variables from, never opened.
+ *
+ * Unlike `settingsCandidates` this one lists a directory, which is why it is a
+ * separate function called from `discoverSettings` rather than folded in there:
+ * that one promises paths in, candidates out, and nothing touching a disk.
+ *
+ * A directory that exists and cannot be listed yields the directory itself as a
+ * candidate, so it is read as one `unreadable` source rather than as silence.
+ * What it holds is unknown, and an unknown in the tier that outranks every
+ * other file is not the same as a tier that sets nothing.
+ */
+export function managedDropInCandidates(
+  managedSettingsPath: string,
+  list: (dir: string) => string[] = readdirSync,
+): SettingsCandidate[] {
+  const dir = join(dirname(managedSettingsPath), 'managed-settings.d');
+  if (!existsSync(dir)) return [];
+  let names: string[];
+  try {
+    names = list(dir);
+  } catch {
+    return [{ scope: 'managed-drop-in', path: dir }];
+  }
+  return names
+    .filter((n) => n.endsWith('.json') && !n.startsWith('.'))
+    .toSorted()
+    .map((n) => ({ scope: 'managed-drop-in' as const, path: join(dir, n) }));
 }
 
 /**
@@ -511,10 +639,12 @@ export function settingsCandidates(env: {
  */
 export function loadSettingsSources(candidates: SettingsCandidate[]): ToolSearchSource[] {
   return candidates.map((c) => {
-    if (!existsSync(c.path)) return { scope: c.scope, source: c.path, state: 'absent' as const, vars: {} };
+    if (!existsSync(c.path))
+      return { scope: c.scope, source: c.path, state: 'absent' as const, vars: {} };
     try {
       const doc = parseJsonc(readFileSync(c.path, 'utf8'));
-      if (!doc || typeof doc !== 'object' || Array.isArray(doc)) throw new Error('not a settings object');
+      if (!doc || typeof doc !== 'object' || Array.isArray(doc))
+        throw new Error('not a settings object');
       const block = (doc as { env?: unknown }).env;
       const vars: ToolSearchEnv = {};
       const unreadable: ToolSearchVar[] = [];
@@ -531,12 +661,16 @@ export function loadSettingsSources(candidates: SettingsCandidate[]): ToolSearch
           else unreadable.push(name);
         }
       }
+      // The same open answers a second question: whether this file sets the
+      // MCP allowlist, denylist, or the managed-only flag (mcp-policy.ts).
+      const mcpPolicy = extractSourcePolicy(doc);
       return {
         scope: c.scope,
         source: c.path,
         state: 'read' as const,
         vars,
         ...(unreadable.length ? { unreadable } : {}),
+        ...(mcpPolicy ? { mcpPolicy } : {}),
       };
     } catch {
       return { scope: c.scope, source: c.path, state: 'unreadable' as const, vars: {} };

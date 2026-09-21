@@ -8,10 +8,10 @@
   "tools": [],
   "canonicalSha256": null,
   "rawToolsCapture": null,
-  "measuredAt": "2026-09-04T13:06:52.869Z",
+  "measuredAt": "2026-09-16T08:32:57.779Z",
   "serverName": "hana-cli",
   "launchCommand": "npx -y -p hana-cli hana-cli-mcp",
-  "notes": "reproduced with the shared package cache bypassed; server exited (code 1); stderr tail: purchased (at exorbitant rates) by contacting i@izs.me\nnode:internal/modules/package_json_reader:314\n  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);\n        ^\n\nError [ERR_MODULE_NOT_FOUND]: Cannot find package '@modelcontextprotocol/sdk' imported from /tmp/.npm-cache/_npx/740aa3a300c453f0/node_modules/hana-cli/mcp-server/build/index.js\n  code: 'ERR_MODULE_NOT_FOUND'\n}\n\nNode.js v22.23.2",
+  "notes": "reproduced with the shared package cache bypassed; server exited (code 1); stderr tail: widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me\nnode:internal/modules/package_json_reader:314\n  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);\n        ^\n\nError [ERR_MODULE_NOT_FOUND]: Cannot find package '@modelcontextprotocol/sdk' imported from /tmp/.npm-cache/_npx/740aa3a300c453f0/node_modules/hana-cli/mcp-server/build/index.js\n  code: 'ERR_MODULE_NOT_FOUND'\n}\n\nNode.js v22.23.2",
   "isolation": {
     "docker": true,
     "image": "public.ecr.aws/docker/library/node:22-slim",
@@ -19,5 +19,6 @@
     "note": "network enabled for package fetch; clean FS, no host credentials",
     "arch": "linux/amd64"
   },
-  "timeoutMs": 240000
+  "timeoutMs": 240000,
+  "requestedProtocolVersion": "2025-06-18"
 }

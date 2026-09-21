@@ -1,6 +1,8 @@
 # perplexity — context cost
 
-**133 tokens** across 1 tools — *lean* (< 1K). Measured 2026-09-05 under [methodology v1.0](../METHODOLOGY.html).
+**133 tokens** across 1 tools — *lean* (< 1K). Measured 2026-09-09 under [methodology v1.0](../METHODOLOGY.html).
+
+An Anthropic request carries 133 of those tokens as tool definitions, and Claude counts those at **503**.
 
 | | |
 |---|---|
@@ -8,7 +10,7 @@
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y server-perplexity-ask` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | PERPLEXITY_API_KEY |
 | canonical SHA-256 | `bf3f548ecca0308f30e544a03d3a36778dbbfba3a5ed12dab6d981dcbcc7a73c` |
 | category | vendor-official |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | perplexity_ask | 131 | 98.5% | 38 | 80 |
 
@@ -24,7 +26,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -42,6 +44,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-19 | 133 | 1 | not recorded | docker | no change |
 | 2026-09-04 | 133 | 1 | 0.1.0 | docker | no change |
 | 2026-09-05 | 133 | 1 | 0.1.0 | docker | no change |
+| 2026-09-09 | 133 | 1 | 0.1.0 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

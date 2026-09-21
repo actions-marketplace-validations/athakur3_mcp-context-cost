@@ -1,6 +1,8 @@
 # pinecone — context cost
 
-**5,903 tokens** across 9 tools — *moderate* (5–15K). Measured 2026-09-05 under [methodology v1.0](../METHODOLOGY.html).
+**5,903 tokens** across 9 tools — *moderate* (5–15K). Measured 2026-09-09 under [methodology v1.0](../METHODOLOGY.html).
+
+An Anthropic request carries 5,679 of those tokens as tool definitions, and Claude counts those at **9,184**.
 
 | | |
 |---|---|
@@ -8,7 +10,7 @@
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y @pinecone-database/mcp` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | PINECONE_API_KEY |
 | canonical SHA-256 | `cc8ffaadb37615f11747b0a1eafd8541cfb2f31064adcd4973860f8f03bab377` |
 | category | vendor-official |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | search-records | 1,179 | 20.0% | 111 | 1,031 |
 | cascading-search | 1,154 | 19.5% | 55 | 1,063 |
@@ -32,7 +34,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -50,6 +52,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-19 | 5,903 | 9 | not recorded | docker | no change |
 | 2026-09-04 | 5,903 | 9 | 0.3.0 | docker | no change |
 | 2026-09-05 | 5,903 | 9 | 0.3.0 | docker | no change |
+| 2026-09-09 | 5,903 | 9 | 0.3.0 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

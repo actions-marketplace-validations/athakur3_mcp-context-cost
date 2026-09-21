@@ -16,24 +16,29 @@ import {
 import { parseDivergence } from '../src/core/divergence.js';
 
 /**
- * The published deferral tables, read against the resolver they describe.
+ * The published deferral table, read against the resolver it describes.
  *
- * Two pages tell a reader what `audit` will say about their machine: the front
- * page, which is both what GitHub renders and the only document inside the npm
- * tarball, and the methodology page GitHub Pages serves. Both have drifted from
- * `src/audit/deferral.ts` while every check reported success — the methodology
- * table was repaired by hand on 2026-08-21 and the front page's on 2026-08-22,
- * and in between the front page told a reader whose settings file held the JSON
- * boolean `false` that deferral was off, which is exactly the machine the
- * command refuses to answer for. Repairing the instances does nothing about the
- * next one: there were 425 tests and not one of them opened either page.
+ * Two pages used to tell a reader what `audit` will say about their machine,
+ * and both drifted from `src/audit/deferral.ts` while every check reported
+ * success — the methodology table was repaired by hand on 2026-08-21 and the
+ * front page's on 2026-08-22, and in between the front page told a reader whose
+ * settings file held the JSON boolean `false` that deferral was off, which is
+ * exactly the machine the command refuses to answer for. Repairing the
+ * instances does nothing about the next one: there were 425 tests and not one
+ * of them opened either page.
  *
- * So every row of both tables is a case here — a machine, the words the page
- * uses for that machine, and the answer `evaluateDeferral` actually gives it.
- * The words have to be on the page as written, and the resolver has to agree
- * with them. Either side moving alone fails, which is the property being
- * bought: the drift was invisible from the code, and a resolver change is
- * invisible from the pages.
+ * The front page's copy was removed on 2026-09-08 and it now points here
+ * instead. That is the same defect answered one level up: a model corrected
+ * five times in two days was being corrected in two places, and the second copy
+ * existed only because this file made it safe to keep. One page cannot disagree
+ * with itself.
+ *
+ * So every row of the table is a case here — a machine, the words the page uses
+ * for that machine, and the answer `evaluateDeferral` actually gives it. The
+ * words have to be on the page as written, and the resolver has to agree with
+ * them. Either side moving alone fails, which is the property being bought: the
+ * drift was invisible from the code, and a resolver change is invisible from
+ * the page.
  */
 
 const repoRoot = join(import.meta.dirname, '..');
@@ -43,7 +48,6 @@ const readRepo = (p: string) => readFileSync(join(repoRoot, p), 'utf8');
 const flatten = (s: string) => s.replace(/\s+/g, ' ').trim();
 
 const PAGE_FILES = {
-  README: 'README.md',
   METHODOLOGY: 'docs/METHODOLOGY.md',
 } as const;
 type Page = keyof typeof PAGE_FILES;
@@ -51,7 +55,6 @@ const PAGES = Object.keys(PAGE_FILES) as Page[];
 
 /** The header line of the deferral table on each page. */
 const TABLE_HEADER: Record<Page, string> = {
-  README: '| setting | what the audit reports |',
   METHODOLOGY: '| read | value | posture |',
 };
 
@@ -71,9 +74,11 @@ function tableRows(page: Page): string[] {
   // removed it. Refusing here is the same rule the product applies to a gate
   // whose answer could not be established.
   if (head < 0) throw new Error(`${PAGE_FILES[page]} no longer carries the deferral table`);
-  if (!lines[head + 1].startsWith('|-')) throw new Error(`${PAGE_FILES[page]}: no table under that header`);
+  if (!lines[head + 1].startsWith('|-'))
+    throw new Error(`${PAGE_FILES[page]}: no table under that header`);
   const rows: string[] = [];
-  for (let i = head + 2; i < lines.length && lines[i].startsWith('|'); i++) rows.push(flatten(lines[i]));
+  for (let i = head + 2; i < lines.length && lines[i].startsWith('|'); i++)
+    rows.push(flatten(lines[i]));
   rowCache.set(page, rows);
   return rows;
 }
@@ -86,7 +91,10 @@ function tableRows(page: Page): string[] {
 function unionMembers(declaration: string): string[] {
   const src = readRepo('src/audit/deferral.ts');
   const at = src.indexOf(declaration);
-  if (at < 0) throw new Error(`deferral.ts no longer declares \`${declaration}\` — this check cannot be established`);
+  if (at < 0)
+    throw new Error(
+      `deferral.ts no longer declares \`${declaration}\` — this check cannot be established`,
+    );
   const body = src.slice(at + declaration.length, src.indexOf(';', at));
   const members = [...body.matchAll(/'([a-z-]+)'/g)].map((m) => m[1]);
   if (members.length === 0) throw new Error(`no members read from \`${declaration}\``);
@@ -100,6 +108,7 @@ const AUTO_PCT = String(Number((TOOL_SEARCH_AUTO_SHARE * 100).toFixed(6)));
 
 const USER = '/home/u/.claude/settings.json';
 const LOCAL = '/proj/.claude/settings.local.json';
+const MANAGED = '/Library/Application Support/ClaudeCode/managed-settings.json';
 
 const settingsFile = (
   scope: ToolSearchSource['scope'],
@@ -135,7 +144,6 @@ interface Machine {
 
 /** What a page says about that machine, verbatim. */
 interface Claim {
-  README?: string;
   METHODOLOGY?: string;
 }
 
@@ -159,8 +167,8 @@ const CASES: Case[] = [
     machines: [{}, { env: {} }, { settings: [] }],
     mode: 'defers-all',
     row: {
-      README: '| nothing set (the default) | every definition deferred, at any size — no threshold applies |',
-      METHODOLOGY: '| | otherwise / nothing set anywhere | the documented default: every definition deferred, no threshold |',
+      METHODOLOGY:
+        '| | otherwise / nothing set anywhere | the documented default: every definition deferred, no threshold |',
     },
   },
   {
@@ -171,7 +179,6 @@ const CASES: Case[] = [
     ],
     mode: 'defers-all',
     row: {
-      README: '| `ENABLE_TOOL_SEARCH=true` | same: every definition deferred |',
       METHODOLOGY: '| 2. `ENABLE_TOOL_SEARCH` | `true` | every definition deferred, at any size |',
     },
   },
@@ -183,8 +190,6 @@ const CASES: Case[] = [
     ],
     mode: 'loads-upfront',
     row: {
-      README:
-        '| `ENABLE_TOOL_SEARCH=false` | deferral off — every request carries the full total. In a settings `env` block that is the **string** `"false"`; the JSON boolean `false` is the last row, not this one |',
       METHODOLOGY: '| | `false` | loads up front |',
     },
   },
@@ -197,10 +202,6 @@ const CASES: Case[] = [
     mode: 'threshold',
     thresholdShare: TOOL_SEARCH_AUTO_SHARE,
     row: {
-      README:
-        '| `ENABLE_TOOL_SEARCH=auto` / `auto:N` | deferred only once definitions reach ' +
-        AUTO_PCT +
-        '% / N% of the context window |',
       METHODOLOGY:
         '| | `auto` / `auto:N` (N = 0–100) | deferred once the definitions reach ' +
         AUTO_PCT +
@@ -208,21 +209,69 @@ const CASES: Case[] = [
     },
   },
   {
-    what: 'CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS is read first and ENABLE_TOOL_SEARCH does not override it',
+    what: 'CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS read as true is read first, and ENABLE_TOOL_SEARCH does not override it',
     machines: [
       { env: { CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: '1' } },
+      { env: { CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: 'true' } },
+      // Casing and surrounding space are the client's, not ours: it lower-cases
+      // and trims before comparing, and the row says "in any casing".
+      { env: { CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: ' ON ' } },
+      { env: { CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: 'Yes' } },
       { env: { CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: '1', ENABLE_TOOL_SEARCH: 'true' } },
       {
-        settings: [settingsFile('user-settings', USER, { CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: '1' })],
+        settings: [
+          settingsFile('user-settings', USER, { CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: '1' }),
+        ],
         env: { ENABLE_TOOL_SEARCH: 'true' },
       },
     ],
     mode: 'loads-upfront',
     row: {
-      README:
-        '| `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS` set | tool search off — read first, because `ENABLE_TOOL_SEARCH` cannot override it |',
       METHODOLOGY:
-        '| 1. `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS` | any non-empty value | tool search off — loads up front. Read first because it cannot be overridden by `ENABLE_TOOL_SEARCH` |',
+        '| 1. `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS` | `1`, `true`, `yes` or `on`, in any casing | tool search off — loads up front. Read first because it cannot be overridden by `ENABLE_TOOL_SEARCH` |',
+    },
+  },
+  {
+    // The defect this case exists for: reading the variable's presence rather
+    // than its value told every one of these machines that it pays the whole
+    // total on every request, and each of them defers exactly as the default does.
+    what: 'CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS read as false turned nothing off, so the read moves on',
+    machines: [
+      { env: { CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: '0' } },
+      { env: { CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: 'false' } },
+      { env: { CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: 'off' } },
+      { env: { CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: 'No' } },
+      {
+        settings: [
+          settingsFile('user-settings', USER, { CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: '0' }),
+        ],
+      },
+    ],
+    mode: 'defers-all',
+    row: {
+      METHODOLOGY:
+        '| | `0`, `false`, `no` or `off`, in any casing | it turned nothing off, so it decides nothing and the read moves on to `ENABLE_TOOL_SEARCH` |',
+    },
+    prose: {
+      METHODOLOGY:
+        'is a boolean flag in the client, not a marker whose presence alone is the signal',
+    },
+  },
+  {
+    what: 'a CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS value in neither set claims nothing',
+    machines: [
+      { env: { CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: '2' } },
+      { env: { CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: 'tool-search-2026-01-01' } },
+      {
+        settings: [
+          settingsFile('user-settings', USER, { CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: 'maybe' }),
+        ],
+      },
+    ],
+    mode: 'setting-unrecognized',
+    row: {
+      METHODOLOGY:
+        '| | any other value | **unrecognized** — no posture is claimed from it, the same as for an undocumented `ENABLE_TOOL_SEARCH` value below |',
     },
   },
   {
@@ -230,12 +279,18 @@ const CASES: Case[] = [
     machines: [
       { env: { ANTHROPIC_BASE_URL: 'https://proxy.internal/v1' } },
       { env: { ANTHROPIC_BASE_URL: 'not a url?key=redacted' } },
-      { settings: [settingsFile('user-settings', USER, { ANTHROPIC_BASE_URL: 'https://proxy.internal/v1' })] },
+      {
+        settings: [
+          settingsFile('user-settings', USER, { ANTHROPIC_BASE_URL: 'https://proxy.internal/v1' }),
+        ],
+      },
+      // The row says host, and a host carries its port. Claude Code compares
+      // the host too, so this machine has tool search off — reading the
+      // hostname made it first-party here and printed the opposite.
+      { env: { ANTHROPIC_BASE_URL: 'https://api.anthropic.com:8443/v1' } },
     ],
     mode: 'loads-upfront',
     row: {
-      README:
-        '| `ANTHROPIC_BASE_URL` off `api.anthropic.com` | falls back to loading up front — consulted only while `ENABLE_TOOL_SEARCH` is unset |',
       METHODOLOGY:
         '| 3. `ANTHROPIC_BASE_URL` | host other than `api.anthropic.com`, or a value that does not parse | loads up front. Consulted only while `ENABLE_TOOL_SEARCH` is unset |',
     },
@@ -246,14 +301,20 @@ const CASES: Case[] = [
       { env: { ENABLE_TOOL_SEARCH: 'maybe' } },
       { env: { ENABLE_TOOL_SEARCH: 'auto:101' } },
       { settings: [settingsFile('user-settings', USER, { ENABLE_TOOL_SEARCH: 'yes' })] },
+      // The administrator-tier override. An undocumented value there means the
+      // disabling variable is not what decides, and this is the machine that
+      // was told it carries the whole total on every request while its
+      // organisation was keeping tool search on.
+      {
+        settings: [settingsFile('managed-settings', MANAGED, { ENABLE_TOOL_SEARCH: 'force' })],
+        env: { CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: '1' },
+      },
     ],
     mode: 'setting-unrecognized',
     row: {
-      README: '| anything else in `ENABLE_TOOL_SEARCH` | not a documented value, so nothing is claimed from it |',
       METHODOLOGY: '| | anything else | **unrecognized** — no posture is claimed from it |',
     },
     prose: {
-      README: 'and when `ENABLE_TOOL_SEARCH` holds a value Claude Code does not document',
       METHODOLOGY: 'when `ENABLE_TOOL_SEARCH` holds an undocumented value',
     },
   },
@@ -267,13 +328,10 @@ const CASES: Case[] = [
     mode: 'setting-unresolved',
     unresolved: 'value-unreadable',
     row: {
-      README:
-        '| any of the three set, in a settings `env` block, to something that is not a string — a JSON boolean, a number, `null` | it is set there and what it is set to is unknown, so no posture is claimed: the report says whether these tokens are deferred cannot be said from it |',
       METHODOLOGY:
         '| at 1, 2 or 3 | set by the place that would decide, to something that is not a readable string — an `env` block holding a JSON boolean, a number or `null` | **unreadable** — the variable is set there and what it is set to is unknown, so no posture is claimed and the report says whether these tokens are deferred cannot be said from it. A settings file holding `false` rather than `"false"` is this row, not the `false` row above |',
     },
     prose: {
-      README: 'when the place that would decide sets the variable to something that is not a string',
       METHODOLOGY: 'when the place that would decide sets the variable to a value this cannot read',
     },
   },
@@ -288,18 +346,21 @@ const CASES: Case[] = [
     mode: 'setting-unresolved',
     unresolved: 'sources-disagree',
     prose: {
-      README: 'when two places set the same variable to different values',
-      METHODOLOGY: 'when two places set the same variable to different values and no order between them is on record',
+      METHODOLOGY:
+        'when two places set the same variable to different values and no order between them is on record',
     },
   },
   {
     what: 'a settings file that exists and cannot be read is refused, not treated as empty',
-    machines: [{ settings: [unreadableFile] }, { env: { ENABLE_TOOL_SEARCH: 'true' }, settings: [unreadableFile] }],
+    machines: [
+      { settings: [unreadableFile] },
+      { env: { ENABLE_TOOL_SEARCH: 'true' }, settings: [unreadableFile] },
+    ],
     mode: 'setting-unresolved',
     unresolved: 'source-unreadable',
     prose: {
-      README: 'when a settings file exists and cannot be read',
-      METHODOLOGY: 'when a settings file exists and cannot be read, since what it sets is unknown rather than nothing',
+      METHODOLOGY:
+        'when a settings file exists and cannot be read, since what it sets is unknown rather than nothing',
     },
   },
   {
@@ -319,13 +380,10 @@ const CASES: Case[] = [
     },
   },
   {
-    what: 'the nine discovered clients with no default on record are said to pay in full',
+    what: 'the six discovered clients with no default on record are said to pay in full',
     machines: [
       { client: 'claude-desktop' },
-      { client: 'cursor' },
-      { client: 'vscode' },
       { client: 'windsurf' },
-      { client: 'codex' },
       { client: 'gemini' },
       { client: 'zed' },
       { client: 'kiro' },
@@ -333,10 +391,17 @@ const CASES: Case[] = [
     ],
     mode: 'no-deferral-on-record',
     prose: {
-      README:
-        '**Clients with no default deferral on record** — Claude Desktop, Cursor, VS Code, Windsurf, Codex CLI, Gemini CLI, Zed, Kiro, Goose.',
       METHODOLOGY:
-        'No default deferral is on record for Claude Desktop, Cursor, VS Code, Windsurf, Codex CLI, Gemini CLI, Zed, Kiro or Goose',
+        'No default deferral is on record for Claude Desktop, Windsurf, Gemini CLI, Zed, Kiro or Goose',
+    },
+  },
+  {
+    what: 'the three clients whose vendor is on record as deferring are not said to pay in full',
+    machines: [{ client: 'cursor' }, { client: 'codex' }, { client: 'vscode' }],
+    mode: 'deferral-on-record',
+    prose: {
+      METHODOLOGY:
+        'For **Cursor**, **Codex CLI** and **VS Code**, `audit` prints the record, its conditions and its sources',
     },
   },
   {
@@ -353,8 +418,6 @@ const CASES: Case[] = [
     thresholdShare: TOOL_SEARCH_AUTO_SHARE,
     crosses: false,
     row: {
-      README:
-        '| a server pinned `"alwaysLoad": true` in its entry | loads at session start whatever the setting says — read from the entry, named with its tokens, and left out of any threshold comparison |',
       METHODOLOGY:
         '| the entry itself | `alwaysLoad: true` | loads at session start whatever the setting says — read from the entry, named with its tokens, and left out of any threshold comparison |',
     },
@@ -387,19 +450,30 @@ describe('the published deferral tables describe the resolver', () => {
     it(c.what, () => {
       for (const m of c.machines) {
         const verdict = verdictFor(m);
-        expect(verdict.mode, `the resolver answers ${JSON.stringify(m)} differently from the page`).toBe(c.mode);
+        expect(
+          verdict.mode,
+          `the resolver answers ${JSON.stringify(m)} differently from the page`,
+        ).toBe(c.mode);
         expect(verdict.setting?.unresolved ?? null).toBe(c.unresolved ?? null);
         if (c.thresholdShare !== undefined) expect(verdict.thresholdShare).toBe(c.thresholdShare);
-        if (c.crosses !== undefined) expect(verdict.crosses, `the resolver puts ${JSON.stringify(m)} on a side the page does not`).toBe(c.crosses);
+        if (c.crosses !== undefined)
+          expect(
+            verdict.crosses,
+            `the resolver puts ${JSON.stringify(m)} on a side the page does not`,
+          ).toBe(c.crosses);
       }
       for (const page of PAGES) {
         const row = c.row?.[page];
         if (row) {
-          expect(tableRows(page), `${PAGE_FILES[page]} no longer carries this row`).toContain(flatten(row));
+          expect(tableRows(page), `${PAGE_FILES[page]} no longer carries this row`).toContain(
+            flatten(row),
+          );
         }
         const prose = c.prose?.[page];
         if (prose) {
-          expect(pageText(page), `${PAGE_FILES[page]} no longer says this`).toContain(flatten(prose));
+          expect(pageText(page), `${PAGE_FILES[page]} no longer says this`).toContain(
+            flatten(prose),
+          );
         }
       }
     });
@@ -413,19 +487,27 @@ describe('the published deferral tables describe the resolver', () => {
       const claimed = CASES.map((c) => c.row?.[page])
         .filter((r): r is string => Boolean(r))
         .map(flatten);
-      expect(new Set(claimed).size, `${PAGE_FILES[page]}: two cases claim the same row`).toBe(claimed.length);
-      expect([...tableRows(page)].sort()).toEqual([...claimed].sort());
+      expect(new Set(claimed).size, `${PAGE_FILES[page]}: two cases claim the same row`).toBe(
+        claimed.length,
+      );
+      expect(tableRows(page).toSorted()).toEqual(claimed.toSorted());
     }
   });
 
   it('publishes something about every posture the resolver can return', () => {
     for (const mode of MODES) {
       const covered = CASES.filter((c) => c.mode === mode && (c.row || c.prose));
-      expect(covered.length, `\`${mode}\` is a posture no published page describes`).toBeGreaterThan(0);
+      expect(
+        covered.length,
+        `\`${mode}\` is a posture no published page describes`,
+      ).toBeGreaterThan(0);
     }
     for (const reason of REFUSAL_REASONS) {
       const covered = CASES.filter((c) => c.unresolved === reason && (c.row || c.prose));
-      expect(covered.length, `\`${reason}\` is a refusal no published page describes`).toBeGreaterThan(0);
+      expect(
+        covered.length,
+        `\`${reason}\` is a refusal no published page describes`,
+      ).toBeGreaterThan(0);
     }
   });
 
@@ -435,18 +517,22 @@ describe('the published deferral tables describe the resolver', () => {
     expect(CASES.filter((c) => !c.row && !c.prose).map((c) => c.what)).toEqual([]);
   });
 
-  it('counts its refusals on the front page as the resolver counts them', () => {
+  it('counts its refusals on the methodology page as the resolver counts them', () => {
     const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'];
     const refusals = new Set(
       CASES.filter((c) => c.mode === 'setting-unresolved' || c.mode === 'setting-unrecognized').map(
         (c) => c.unresolved ?? c.mode,
       ),
     );
-    expect(pageText('README')).toContain(`which is ${NUMBER_WORDS[refusals.size]} refusals and not one`);
+    expect(pageText('METHODOLOGY')).toContain(
+      `which is ${NUMBER_WORDS[refusals.size]} refusals and not one`,
+    );
   });
 
   it('prints the threshold share both pages quote', () => {
-    expect(verdictFor({ env: { ENABLE_TOOL_SEARCH: 'auto' } }).thresholdShare).toBe(TOOL_SEARCH_AUTO_SHARE);
+    expect(verdictFor({ env: { ENABLE_TOOL_SEARCH: 'auto' } }).thresholdShare).toBe(
+      TOOL_SEARCH_AUTO_SHARE,
+    );
     // The `N%` half of the same row: the page promises the number is the one
     // asked for, not the default in disguise.
     expect(verdictFor({ env: { ENABLE_TOOL_SEARCH: 'auto:35' } }).thresholdShare).toBe(0.35);
@@ -455,9 +541,26 @@ describe('the published deferral tables describe the resolver', () => {
 
   it('consults the base URL only while ENABLE_TOOL_SEARCH is unset, as both rows say', () => {
     expect(
-      verdictFor({ env: { ENABLE_TOOL_SEARCH: 'true', ANTHROPIC_BASE_URL: 'https://proxy.internal/v1' } }).mode,
+      verdictFor({
+        env: { ENABLE_TOOL_SEARCH: 'true', ANTHROPIC_BASE_URL: 'https://proxy.internal/v1' },
+      }).mode,
     ).toBe('defers-all');
-    expect(verdictFor({ env: { ANTHROPIC_BASE_URL: 'https://api.anthropic.com' } }).mode).toBe('defers-all');
+    expect(verdictFor({ env: { ANTHROPIC_BASE_URL: 'https://api.anthropic.com' } }).mode).toBe(
+      'defers-all',
+    );
+  });
+
+  it('reads the base URL host the way the client does, port and all', () => {
+    // The row says host, and a host carries its port. The narrowing that
+    // matters is that the first-party reading — the one saying these tokens are
+    // free — does not widen to a port the client would treat as a proxy.
+    const mode = (url: string) => verdictFor({ env: { ANTHROPIC_BASE_URL: url } }).mode;
+    expect(mode('https://api.anthropic.com:8443/v1')).toBe('loads-upfront');
+    expect(mode('https://api.anthropic.com')).toBe('defers-all');
+    // `URL` drops a scheme's default port, and the client parses with the same
+    // thing, so this stays first-party in both.
+    expect(mode('https://api.anthropic.com:443/v1')).toBe('defers-all');
+    expect(mode('HTTPS://API.ANTHROPIC.COM/v1')).toBe('defers-all');
   });
 
   /**
@@ -473,7 +576,9 @@ describe('the published deferral tables describe the resolver', () => {
     const { low, high, servers } = wireToClientRatio(run);
     const band = `${low.toFixed(2)}×–${high.toFixed(2)}× across ${servers} servers`;
     for (const page of PAGES) {
-      expect(pageText(page), `${PAGE_FILES[page]} no longer prints the derived band`).toContain(band);
+      expect(pageText(page), `${PAGE_FILES[page]} no longer prints the derived band`).toContain(
+        band,
+      );
     }
   });
 
@@ -498,7 +603,10 @@ describe('the published deferral tables describe the resolver', () => {
    */
   it('is a snapshot of the committed divergence run that may lag but never overstates', () => {
     const run = parseDivergence(readFileSync(join(repoRoot, 'results', 'divergence.json'), 'utf8'));
-    expect(run, 'results/divergence.json must parse — the constant is a snapshot of it').not.toBeNull();
+    expect(
+      run,
+      'results/divergence.json must parse — the constant is a snapshot of it',
+    ).not.toBeNull();
     // Asked of `bandSnapshotProblem` rather than restated here, because the
     // release readiness gate asks the same question of the constant the *last
     // release* shipped, and one rule written twice is how the two would come to
@@ -529,14 +637,18 @@ describe('the published deferral tables describe the resolver', () => {
 
     it('refuses a snapshot measured across more servers than the run holds', () => {
       // Not an old number but an invented one: nobody measured that many.
-      expect(bandSnapshotProblem({ ...run, servers: 87 }, run)).toContain('87 servers where the run holds 86');
+      expect(bandSnapshotProblem({ ...run, servers: 87 }, run)).toContain(
+        '87 servers where the run holds 86',
+      );
     });
 
     it('refuses a band that has moved at the precision it is published at', () => {
       expect(bandSnapshotProblem({ ...run, high: 1.94 }, run)).toContain('0.19×–1.94×');
       expect(bandSnapshotProblem({ ...run, low: 0.2 }, run)).toContain('0.20×–1.93×');
       // The five-fold move of 2026-09-05, which is what this exists to catch.
-      expect(bandSnapshotProblem(run, { ...run, high: 10.88 })).toContain('the run derives 0.19×–10.88×');
+      expect(bandSnapshotProblem(run, { ...run, high: 10.88 })).toContain(
+        'the run derives 0.19×–10.88×',
+      );
     });
   });
 });

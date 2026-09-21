@@ -5,51 +5,45 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   isGood,
+  hasNumber,
   snapshot,
   verdict,
   restore,
   MIN_REGRESSIONS,
   FAULT_RATIO,
   type Snapshot,
+  type Outcome,
 } from '../src/sweep/harness-guard.js';
 import type { Measurement, MeasurementStatus } from '../src/core/types.js';
 import { TSX_CLI } from './tsx.js';
-
-function measurement(over: Partial<Measurement> = {}): Measurement {
-  return {
-    methodologyVersion: '1.0',
-    provider: 'tiktoken',
-    encoding: 'o200k_base',
-    status: 'measured',
-    totalTokens: 2378,
-    toolCount: 9,
-    tools: [],
-    canonicalSha256: 'deadbeef',
-    rawToolsCapture: [],
-    measuredAt: '2026-08-19T12:03:51.569Z',
-    serverName: 'memory',
-    ...over,
-  };
-}
+import { removeTempRoot } from './tmp.js';
+import { measurement } from './factories.js';
+import { writeEmptyToolsStub } from './empty-tools-stub.js';
 
 /** N servers that were all measuring fine before the sweep. */
 function goodPrior(n: number): Snapshot[] {
   return Array.from({ length: n }, (_, i) => ({
     name: `s${i}`,
     status: 'measured' as MeasurementStatus,
+    toolCount: 9,
     measurementJson: JSON.stringify(measurement({ serverName: `s${i}` })),
     badgeJson: '{"schemaVersion":1}',
   }));
 }
 
-function statuses(entries: Record<string, MeasurementStatus>): Map<string, MeasurementStatus> {
-  return new Map(Object.entries(entries));
+/** An outcome per status: a real count where the status is good, none otherwise. */
+function of(status: MeasurementStatus): Outcome {
+  return { status, toolCount: isGood(status) ? 9 : null };
+}
+
+function statuses(entries: Record<string, MeasurementStatus>): Map<string, Outcome> {
+  return new Map(Object.entries(entries).map(([n, s]) => [n, of(s)]));
 }
 
 /** All of `prior` swept, the first `failed` of them coming back broken. */
-function outcome(prior: Snapshot[], failed: number): Map<string, MeasurementStatus> {
-  const m = new Map<string, MeasurementStatus>();
-  prior.forEach((s, i) => m.set(s.name, i < failed ? 'startup-failure' : 'measured'));
+function outcome(prior: Snapshot[], failed: number): Map<string, Outcome> {
+  const m = new Map<string, Outcome>();
+  prior.forEach((s, i) => m.set(s.name, of(i < failed ? 'startup-failure' : 'measured')));
   return m;
 }
 
@@ -63,6 +57,21 @@ describe('isGood', () => {
     for (const s of ['startup-failure', 'timeout', 'auth-required', 'remote-auth-wall'] as const) {
       expect(isGood(s)).toBe(false);
     }
+  });
+});
+
+describe('hasNumber', () => {
+  it('is isGood plus a tool count that is not zero', () => {
+    expect(hasNumber({ status: 'measured', toolCount: 9 })).toBe(true);
+    expect(hasNumber({ status: 'dynamic', toolCount: 1 })).toBe(true);
+    expect(hasNumber({ status: 'measured', toolCount: 0 })).toBe(false);
+    expect(hasNumber({ status: 'dynamic', toolCount: 0 })).toBe(false);
+  });
+
+  it('leaves a missing count to the status — only a failure lacks one', () => {
+    expect(hasNumber({ status: 'measured', toolCount: null })).toBe(true);
+    expect(hasNumber({ status: 'startup-failure', toolCount: null })).toBe(false);
+    expect(hasNumber({ status: 'timeout', toolCount: 0 })).toBe(false);
   });
 });
 
@@ -113,12 +122,13 @@ describe('verdict', () => {
       ...Array.from({ length: 20 }, (_, i) => ({
         name: `broken${i}`,
         status: 'startup-failure' as MeasurementStatus,
+        toolCount: null,
         measurementJson: JSON.stringify(measurement({ status: 'startup-failure' })),
         badgeJson: '{"schemaVersion":1}',
       })),
     ];
-    const current = new Map<string, MeasurementStatus>();
-    for (const s of prior) current.set(s.name, 'startup-failure');
+    const current = new Map<string, Outcome>();
+    for (const s of prior) current.set(s.name, of('startup-failure'));
     const v = verdict(prior, current);
     // Only the 2 good ones were ever comparable, so the 20 still-broken servers
     // cannot pad the sweep into a fault.
@@ -152,8 +162,8 @@ describe('verdict', () => {
 
   it('does not treat measured-to-dynamic as a regression — both are real numbers', () => {
     const prior = goodPrior(10);
-    const current = new Map<string, MeasurementStatus>();
-    for (const s of prior) current.set(s.name, 'dynamic');
+    const current = new Map<string, Outcome>();
+    for (const s of prior) current.set(s.name, of('dynamic'));
     const v = verdict(prior, current);
     expect(v.regressed).toHaveLength(0);
     expect(v.fault).toBe(false);
@@ -161,9 +171,30 @@ describe('verdict', () => {
 
   it('counts a timeout wave as a fault too — the original outage was uniform timeouts', () => {
     const prior = goodPrior(79);
-    const current = new Map<string, MeasurementStatus>();
-    for (const s of prior) current.set(s.name, 'timeout');
+    const current = new Map<string, Outcome>();
+    for (const s of prior) current.set(s.name, of('timeout'));
     expect(verdict(prior, current).fault).toBe(true);
+  });
+
+  it('counts a wave of empty tool lists as a fault — a harness that gets nothing back', () => {
+    // measureTools records `[]` as measured with zero tools, so a client that
+    // dropped every server's list would look like 100% success to a status-only
+    // check: the Docker-down case wearing a pass.
+    const prior = goodPrior(20);
+    const current = new Map<string, Outcome>();
+    for (const s of prior) current.set(s.name, { status: 'measured', toolCount: 0 });
+    const v = verdict(prior, current);
+    expect(v.fault).toBe(true);
+    expect(v.regressed).toHaveLength(20);
+    expect(v.reason).toContain('100%');
+  });
+
+  it('does not use a zero-tool record as a baseline either', () => {
+    // A record that says zero tools never had a number to lose.
+    const prior = goodPrior(10).map((s) => ({ ...s, toolCount: 0 }));
+    const v = verdict(prior, outcome(prior, 10));
+    expect(v.comparable).toBe(0);
+    expect(v.reason).toContain('not performed');
   });
 });
 
@@ -175,12 +206,15 @@ describe('snapshot / restore round-trip', () => {
   });
 
   afterEach(() => {
-    rmSync(root, { recursive: true, force: true });
+    removeTempRoot(root);
   });
 
   function publish(name: string, m: Measurement, badge = '{"schemaVersion":1,"label":"x"}') {
     mkdirSync(join(root, 'results', name), { recursive: true });
-    writeFileSync(join(root, 'results', name, 'measurement.json'), JSON.stringify(m, null, 2) + '\n');
+    writeFileSync(
+      join(root, 'results', name, 'measurement.json'),
+      JSON.stringify(m, null, 2) + '\n',
+    );
     mkdirSync(join(root, 'badges'), { recursive: true });
     writeFileSync(join(root, 'badges', `${name}.json`), badge + '\n');
   }
@@ -190,6 +224,15 @@ describe('snapshot / restore round-trip', () => {
     publish('git', measurement({ status: 'startup-failure', serverName: 'git' }));
     const snaps = snapshot(['memory', 'git'], root);
     expect(snaps.map((s) => s.status)).toEqual(['measured', 'startup-failure']);
+  });
+
+  it('reads the tool count off disk, so a zero-tool record is not a baseline', () => {
+    publish('empty', measurement({ serverName: 'empty', toolCount: 0, totalTokens: 1 }));
+    publish('memory', measurement({ toolCount: 9 }));
+    const [empty, mem] = snapshot(['empty', 'memory'], root);
+    expect(empty.toolCount).toBe(0);
+    expect(mem.toolCount).toBe(9);
+    expect(hasNumber({ status: empty.status!, toolCount: empty.toolCount })).toBe(false);
   });
 
   it('snapshots a never-measured server as no record', () => {
@@ -215,8 +258,14 @@ describe('snapshot / restore round-trip', () => {
     const snaps = snapshot(['memory'], root);
 
     // The sweep overwrites both artifacts with a failure, as measureServer does.
-    publish('memory', measurement({ status: 'startup-failure', totalTokens: null }), '{"message":"unknown"}');
-    expect(readFileSync(join(root, 'results', 'memory', 'measurement.json'), 'utf8')).not.toBe(before);
+    publish(
+      'memory',
+      measurement({ status: 'startup-failure', totalTokens: null }),
+      '{"message":"unknown"}',
+    );
+    expect(readFileSync(join(root, 'results', 'memory', 'measurement.json'), 'utf8')).not.toBe(
+      before,
+    );
 
     const restored = restore(snaps, ['memory'], root);
     expect(restored).toEqual(['memory']);
@@ -233,9 +282,13 @@ describe('snapshot / restore round-trip', () => {
     publish('filesystem', measurement({ serverName: 'filesystem', totalTokens: 9999 }));
 
     restore(snaps, ['memory'], root);
-    const fs = JSON.parse(readFileSync(join(root, 'results', 'filesystem', 'measurement.json'), 'utf8'));
+    const fs = JSON.parse(
+      readFileSync(join(root, 'results', 'filesystem', 'measurement.json'), 'utf8'),
+    );
     expect(fs.totalTokens).toBe(9999); // untouched — not in the restore list
-    const mem = JSON.parse(readFileSync(join(root, 'results', 'memory', 'measurement.json'), 'utf8'));
+    const mem = JSON.parse(
+      readFileSync(join(root, 'results', 'memory', 'measurement.json'), 'utf8'),
+    );
     expect(mem.status).toBe('measured');
   });
 
@@ -245,7 +298,9 @@ describe('snapshot / restore round-trip', () => {
     const restored = restore(snaps, ['brand-new'], root);
     expect(restored).toEqual([]);
     // The honest new failure record survives.
-    const m = JSON.parse(readFileSync(join(root, 'results', 'brand-new', 'measurement.json'), 'utf8'));
+    const m = JSON.parse(
+      readFileSync(join(root, 'results', 'brand-new', 'measurement.json'), 'utf8'),
+    );
     expect(m.status).toBe('startup-failure');
   });
 
@@ -269,7 +324,7 @@ describe('sweep-all wiring (subprocess)', () => {
   });
 
   afterEach(() => {
-    rmSync(root, { recursive: true, force: true });
+    removeTempRoot(root);
   });
 
   /**
@@ -278,13 +333,13 @@ describe('sweep-all wiring (subprocess)', () => {
    * actually break Docker. `priorGood` of them already have a real number
    * published, which is what the guard is protecting.
    */
-  function scaffold(n: number, priorGood: number) {
+  function scaffold(n: number, priorGood: number, command = 'node -e "process.exit(1)"') {
     const names = Array.from({ length: n }, (_, i) => `stub${i}`);
     writeFileSync(
       join(root, 'servers.yaml'),
       'servers:\n' +
         names
-          .map((nm) => `  - name: ${nm}\n    command: node -e "process.exit(1)"\n    timeoutSeconds: 10\n`)
+          .map((nm) => `  - name: ${nm}\n    command: ${command}\n    timeoutSeconds: 10\n`)
           .join(''),
     );
     for (let i = 0; i < priorGood; i++) {
@@ -292,17 +347,30 @@ describe('sweep-all wiring (subprocess)', () => {
       mkdirSync(join(root, 'results', name), { recursive: true });
       writeFileSync(
         join(root, 'results', name, 'measurement.json'),
-        JSON.stringify(measurement({ serverName: name, totalTokens: 1000 + i }), null, 2) + '\n',
+        // A real count stated here: the factory's neutral zero would read as
+        // "no baseline" under hasNumber, which is the point of the rule.
+        JSON.stringify(
+          measurement({ serverName: name, totalTokens: 1000 + i, toolCount: 9 }),
+          null,
+          2,
+        ) + '\n',
       );
       mkdirSync(join(root, 'badges'), { recursive: true });
-      writeFileSync(join(root, 'badges', `${name}.json`), '{"schemaVersion":1,"label":"context"}\n');
+      writeFileSync(
+        join(root, 'badges', `${name}.json`),
+        '{"schemaVersion":1,"label":"context"}\n',
+      );
     }
     return names;
   }
 
   function runSweep(): { code: number; out: string } {
     try {
-      const out = execFileSync(process.execPath, [TSX_CLI, sweepAll], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+      const out = execFileSync(process.execPath, [TSX_CLI, sweepAll], {
+        cwd: root,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
       return { code: 0, out };
     } catch (err) {
       const e = err as { status?: number; stdout?: string; stderr?: string };
@@ -323,8 +391,30 @@ describe('sweep-all wiring (subprocess)', () => {
     // Every prior measurement is back to its real number, not the failure the
     // sweep just wrote over it.
     for (let i = 0; i < names.length; i++) {
-      const m = JSON.parse(readFileSync(join(root, 'results', names[i], 'measurement.json'), 'utf8'));
+      const m = JSON.parse(
+        readFileSync(join(root, 'results', names[i], 'measurement.json'), 'utf8'),
+      );
       expect(m.status).toBe('measured');
+      expect(m.totalTokens).toBe(1000 + i);
+    }
+  }, 120_000);
+
+  it('refuses to publish when every server answers tools/list with an empty array', () => {
+    // Six real numbers on record, and every server now lists nothing: the shape
+    // a client that lost every list would produce, and one a status-only check
+    // would have published as six zeros over six numbers.
+    const stub = writeEmptyToolsStub(root);
+    const names = scaffold(6, 6, `node ${stub}`);
+    const { code, out } = runSweep();
+
+    expect(code).toBe(1);
+    expect(out).toContain('HARNESS FAULT');
+    expect(existsSync(join(root, 'results', 'leaderboard.md'))).toBe(false);
+    for (let i = 0; i < names.length; i++) {
+      const m = JSON.parse(
+        readFileSync(join(root, 'results', names[i], 'measurement.json'), 'utf8'),
+      );
+      expect(m.toolCount).toBe(9);
       expect(m.totalTokens).toBe(1000 + i);
     }
   }, 120_000);

@@ -7,63 +7,1017 @@ renames this heading to that version and dates it. Every other section here desc
 someone can install; this one describes the trunk, which is the difference to hold in mind
 while reading it.
 
-- **The rotating re-sweep could not publish anything, and nothing had noticed.** The step that
-  runs the suite before a bot commit exists because a push made with `GITHUB_TOKEN` starts no
-  workflow, so no CI run has ever fired on one — and it sat *before* the regen it depends on.
-  `sweep-all` writes the leaderboard, `history.csv` and the tool vectors; the capture index,
-  the tool-shape baseline, the server pages, the dashboard and the numbers patched into README
-  come from `regen.ts` alone, which the job runs inside its commit step, after the rebase.
-  Between the sweep and regen the tree is therefore *known* to be inconsistent, and the drift
-  guards — which are exact, not heuristic — fail by construction. So the guard could only ever
-  report the ordering. It did: run 33997431756 on 2026-09-06, the first re-sweep since the
-  guard landed, measured its slice, failed three guards, skipped the commit and discarded 34
-  fresh measurements; the next scheduled Wednesday would have done the same. The job now
-  stages what it measured, rebases, and rebuilds the derived files in one step, runs the suite
-  against *that* tree, and pushes it — so the guard reads the bytes the push publishes rather
-  than a tree that never existed anywhere. The regen-after-rebase ordering is unchanged and is
-  still the reason two sweeps on one day do not lose a run to a merge nobody can resolve.
-  `test/workflows.test.ts` holds the order for both jobs that publish data.
+## 0.20.0 — 2026-09-09
 
-- **The rotation is three weeks wide, decided by dispatching it rather than by arguing about
-  it.** A movement in `results/regressions.md` carries a date window as wide as the cycle that
-  produced it, and a six-week window describes the observation schedule rather than the
-  server. The roadmap's lever was to dispatch one slice at `shards=3` and time it against the
-  job's 120-minute cap. Run 33997431756 (2026-09-06): 34 servers measured in 3m46s,
-  cross-checked in 2m44s, Claude column refreshed in 6s; run 33999205923 measured the same
-  slice again forty minutes later in 5m17s. The slowest weeks on record are the
-  two half-set slices of 2026-09-04 — 52 servers, 61m17s and 62m07s measuring — and even that
-  pair, which still carried the `anki` and `grafana` timeouts since fixed, leaves a third of
-  the list far inside the cap. So the schedule cuts the list into three, every row comes round
-  within three Wednesdays, and `resweep.yml` carries the timings that chose the number.
-  README, METHODOLOGY and CONTRIBUTING say three where they said six; the September article
-  keeps the sentence it was written under, because it states the date it was read on and a
-  dated reading is not edited afterwards. The first movements that can name a release on both
-  sides arrived with the same run: `results/regressions.md` read `0 of 17` when the column
-  shipped on 2026-09-05 and reads **2 of 18** a day later — `comfyui-mcp` `0.52.189` →
-  `0.52.199` for +136 tokens, and `desktop-commander` **still** `0.2.48` across +3, which is
-  the case the column was given that word for. Nothing was back-filled; the rotation is what
-  fills it in, and a three-week rotation fills it in twice as fast.
+None of the 103 published records changed status under this release: its two re-sweeps
+measured the same thirty-four servers twice and moved no verdict, which makes those
+thirty-four the first published records to carry the protocol handshake pair — documented
+below before any of them existed. Everything else that changed, changed because this
+project's own words or code were wrong, and most of it traces to one event: on 2026-09-08
+two independent readers audited the plan against the repository and catalogued twelve
+defects. Eight are fixed below. Two stand as written, because the changelog is never
+corrected backward; two await data or a decision. The audit tool itself grew the most: it
+now reads the managed tier that can own a machine's server list, and its budget learned
+what a session is.
 
-- **Two numbers nobody was watching: the band an installed copy states, and the machine a
-  record was made on.** Both were proposed when the work that created them shipped, and
-  neither was built. The first: `results/divergence.json` does not ship, so with no live run
-  to read, the installed `audit` converts wire tokens to client tokens through the constant
-  compiled into it — and that constant is a snapshot of a run that keeps moving. The suite
-  holds the constant *on trunk* to the run committed beside it, and nothing held the one users
-  actually have; only cutting a release can move that one, which makes it a release-readiness
-  question. `tools/release-readiness.ts` now reads the constant at the last version-bump
-  commit — the tree that version was cut from — and asks `bandSnapshotProblem`, the same rule
-  the suite asks of trunk: a snapshot may lag, it may not be wrong. The band must still be
-  right to the two places it is published at, because it decides an above/below verdict
-  against a client threshold, and the count must never exceed the run, because a snapshot
-  naming more servers than were measured is a fabricated number rather than an old one. Both
-  callers ask one function now, and the three pages that print the band quote one precision.
-  The second: `isolation.arch` exists because `local-mcp` sat published as a startup failure
-  whose real finding was the machine it ran on, and a field that is merely *available* fixes
-  nothing. Every record measured since 0.12.0, the release that added it, now has to carry
-  it — or be the one case that honestly cannot, a command that is itself a `docker run`, where
-  the harness never chose the container and says so in the note instead. The boundary date is
-  read from the changelog's own 0.12.0 heading rather than written into the test.
+- **`sweep:all --only=github` was not a narrow sweep.** Eight scripts carried the same
+  byte-identical private flag reader, and it read only the space form — so `--only=github`
+  read as no selection at all and ran a full host sweep that overwrites published records,
+  `--only --docker` swallowed the next flag as a value, and `--shards=3 --only=x` walked
+  straight past the guard that exists to refuse the pair, because both operands read as
+  absent. The CLI already carries the correct reader, with fourteen tests; the sweep
+  scripts and tools now use it, declare their flag specs, and refuse unrecognised or
+  valueless flags at exit 2 — which also closes the documented `--dry-run` hazard, where a
+  mistyped flag was silently ignored while a real sweep ran. The reader moved to
+  `src/flags.ts` rather than being imported from `cli.ts`, for a reason worth recording:
+  `cli.ts` dispatches on `process.argv` at module top level, so importing it *runs the CLI*
+  against the importing script's own argv and exits 2 on the first flag it does not
+  recognise as a command. Every workflow already passes the space form, verified line by
+  line; the exposure was an operator's hand-run and a malformed `workflow_dispatch` input.
+  No published byte moved.
+
+- **One spelling for optional, and three temp roots that outlived their tests.**
+  `Measurement.isolation` was the single optional property in `core/types.ts` not written
+  `| undefined` like its fourteen neighbours; it is now. Three tests created a temp
+  directory and never removed it — two of them spawn the audit CLI with `cwd` inside that
+  root, which is the late-writer race `test/tmp.ts` documents and measured — and each now
+  tears its roots down through `removeTempRoot`. The bare `rmSync` teardowns that remain
+  are correct as they stand: they remove roots only the test process itself wrote into,
+  where the retry buys nothing.
+
+- **A data-shaped number in `src` now declares its own kind, and the release gate fails on
+  one that does not.** The readiness notice used to list every numeric literal with a
+  data-shaped name — eleven, at 0% precision — and ask the reader to classify them afresh
+  each release, because a scanner cannot tell a chosen threshold from a copied datum: they
+  are the same characters. The declaration is now the datum. Two maps in
+  `tools/release-readiness.ts` name every such constant as either **policy** (a threshold
+  somebody chose, with the reason) or **guarded** (a copy of data, named beside the guard
+  that holds it honest); a constant in neither map is a hard failure, and so is a map key
+  that names nothing real — the rule `KNOWN_SPEC_REVISIONS` is already held to. The
+  prose-adjacency branch is gone on purpose: its last two hits were docblocks explaining
+  why the number beside them is safe, one of them literally the correction for the drift
+  the branch existed to catch. And the pin question is now answered once rather than every
+  release: `PIN_DECISION` in `src/core/protocol.ts` records the revisions considered on
+  2026-09-08, why `2025-06-18` stays (2026-07-28 removes the `initialize` handshake, so
+  following it is a change of methodology), and what reopens the question — the notice
+  prints the decision, and a revision the record does not name reopens it by itself.
+
+- **Six test files carried six drifted copies of the `measurement()` factory; one home now.**
+  `test/factories.ts` exports the one factory with neutral defaults — the majority value
+  where the six agreed, zero where they did not — and a test that depends on a value states
+  it at the call site. The suite was the oracle for the consolidation, which is sound
+  because every assertion in the adopting files compares against a literal rather than
+  against another factory-derived value: of 74 call sites, ten needed a value stated and
+  the rest are bare. `session-start`'s factory stays where it is — it derives from
+  `measureTools` on real fixture tools rather than literals, so it cannot join a
+  literal-defaults home. What this buys became true only in 0.19.0, when tests joined
+  typechecking: a new required field on `Measurement` is now one edit, not six compile
+  errors in six files.
+
+- **The dashboard called the bands provisional, three weeks after they froze.** Every render
+  of `docs/dashboard.html` closed with "Bands are provisional until frozen against the
+  full-sweep distribution", while the methodology page has said **frozen on 2026-08-16** the
+  whole time — and `0.19.0` deleted the same stale sentence from `core/bands.ts` and the
+  METHODOLOGY heading without reaching this copy, because it lives in the generator's
+  template rather than in any file that sweep of finished foundations touched. The footer now
+  refers to the methodology's Color-bands section instead of restating anything, which is the
+  rule that fixed the others: the freeze has one home, and a second copy is one edit away
+  from disagreeing again. Regenerating moves one line of the dashboard; no number changes.
+
+- **Two pages never heard about the fourth verdict, and a docblock described the hang-up the
+  code declined.** The remote probe gained `protocol-mismatch` in `0.18.0`; the README and
+  the methodology's remote-entries paragraph went on enumerating three verdicts — measured,
+  auth-walled, unreachable — so the page the README names as the home of "what each verdict
+  quotes" was itself missing one. Both now list four, and say that a protocol-mismatch row
+  leaves the total a floor for the same reason an auth-walled one does: a server exists there
+  that the sum does not count. And `core/types.ts` explained the revision pair with "a
+  disagreement disconnects rather than measuring", citing a `ProtocolMismatch` in
+  `sweep/client.ts` that has never existed — the decision on record is the opposite: eleven
+  measured records negotiate an older revision and stand, and what ends a run is a refusal,
+  not a difference. The docblock now states the decision instead of its negation.
+
+- **The records stamp a handshake pair no published page explained.** Every record the
+  harness writes carries `requestedProtocolVersion`, and `negotiatedProtocolVersion` where
+  `initialize` answered one — but neither field was named on any published page: the
+  methodology's Reproduce-it section said "both halves of the protocol handshake" and left
+  a reader of a record to guess what an absence means. It now names the fields and carries
+  the reading rules in a subsection: absent means not captured — never the requested value,
+  never agreement or disagreement; the pair is stored because a record keeping only the
+  answer would be re-read against whatever the harness asks for *today*, turning every old
+  record into a false disagreement the day the pin moves; and on a measured record the two
+  need not match — a difference is measured through and the numbers stand, while only a
+  refusal ends a run, filing as `protocol-mismatch` with no number at all. Landed before
+  the first scheduled sweep that writes the pair into published records, so the fields are
+  documented before any reader meets one. No number moves; the change is prose on one page.
+
+- **An empty `tools/list` could vouch for the harness.** A server that answers with `[]` is
+  recorded as measured with zero tools — correctly, that is its answer — but the population
+  check that refuses to publish a sweep taken through a broken harness counted every
+  `measured` record as a real number. A harness that got nothing back from anyone would
+  therefore have read as a 100% success and published zeros over every number on record: the
+  one failure the check exists to catch, arriving as a pass. A zero-tool record now carries a
+  note saying what it is and whether the server had declared a tools capability at
+  `initialize` — read from the initialize result the client used to discard — and it no longer
+  counts as evidence in that check, on either side of the comparison. No published record has
+  zero tools today; the guard is proven by mutation, and a sweep of empty lists is proven to
+  restore the prior bytes end to end.
+
+- **"Deferred" was never allowed to read as "not sent", except nothing said so.** The pages
+  explain where a stack's definitions are deferred out of the context window, and never stated
+  the other half: on the mechanism that deferral rides on, every tool's full definition is
+  still sent in the `tools` array of every request — the vendor's own documentation says
+  `defer_loading` "controls what enters the context window, not what you send in the request"
+  (tool-search documentation, §Deferred tool loading, read 2026-09-09). The methodology's
+  who-pays section now carries that sentence with its source, and its scope: the wire headline
+  is what a deferring session's requests still carry, and what deferral moves is what enters
+  context, which the session-start column measures. Scoped to the documented mechanism — a
+  client whose record describes a different one keeps its own words.
+
+- **VS Code's 128 was two facts sharing a numeral, and one sentence about it had expired.**
+  The record read "a hard cap of 128 tools per chat request" beside a threshold "that
+  defaults to 128", leaving open whether the vendor documents a maximum. Re-read 2026-09-09:
+  the cap is documented as a maximum in those words — a chat request "can have a maximum of
+  128 tools enabled at a time", and exceeding it is an error — while the virtual-tools
+  threshold is a *default* with no documented ceiling, described by the settings reference as
+  the way to go **beyond** the 128-tool limit. The two are now stated as the two different
+  facts they are, on the methodology page and in the audit's printed record. The expired
+  sentence: both surfaces said none of these settings appears in VS Code's published settings
+  documentation, which was true on 2026-09-07 and is not today — the settings reference now
+  documents the threshold, and only the agent host's switches remain undocumented. Dates
+  refreshed; the audit still reads no posture from any of it and has measured none of it.
+
+- **A test pinned the harness's own old phrasing to a live record, and vetoed a healthy
+  sweep.** The suite runs inside the sweep job before anything is committed, because a bot
+  push starts no CI — and one test there read `results/magic/measurement.json` off the disk
+  and required its notes to open with the error format the harness emitted before JSON-RPC
+  errors learned to name the method they refused. The first re-measure through the new
+  phrasing (run 34316551533) answered identically — same `-32001`, same vendor message, still
+  auth-required, zero of twenty-nine previously-measured servers regressed — and the job
+  refused to publish over the inserted words `answering initialize`. The claim the test
+  protects, that magic's real refusal classifies as auth-required (the true positive
+  `AUTH_EVIDENCE` was bounded against, 5e99a3d), is now a transcription rebuilt through
+  `rpcErrorMessage` — the rule every other fixture in that file already follows — so it moves
+  with the wire path's phrasing instead of vetoing it. The one remaining record-content pin
+  in the publish path, hana-cli's status, stays deliberately: a recovery there must change a
+  CONTRIBUTING sentence with it.
+
+- **The managed tier could rewrite a machine's server list, and the audit never looked.** An
+  organisation can deploy `managed-mcp.json` — one fixed path per platform — and a claude-code
+  session then loads only what that file defines; deployed empty, it disables MCP outright. On
+  such a machine the audit's session claims described files that do not load. `audit` now
+  reads that path: the managed file gets a row of its own, every suppressed config says so and
+  stays measured as a file, an empty deployment reads as MCP disabled by policy, and a managed
+  file that cannot be read refuses the session's composition rather than guessing. The
+  allow/deny lists are read off the settings files already opened, and applied by direction: a
+  clean `deniedMcpServers` match leaves the session's claims — nothing overrides a deny, and
+  an entry in a tier this audit does not read could only remove more — while
+  `allowedMcpServers` verdicts are reported and never subtracted, because allowlists union
+  across scopes and an unread tier can only broaden one. An entry carrying `${}` expansion is
+  printed as set-but-unevaluated, and the vendor's own evaluation tables run as tests, row for
+  row (managed-mcp documentation, read 2026-09-09).
+
+- **`--budget` now gates the costliest session, not the costliest file.** A context window
+  belongs to one session, and claude-code loads two config files into one — so a pull request
+  could keep every file under the limit while the session it actually runs blew it, and the
+  gate stayed green. Decided 2026-09-09: sessions are the denominator. The report carries a
+  `sessions` array — which files load together, what that costs, what the denylist removed —
+  composed in one place and consumed by the deferral verdict, the printed session line and
+  the gate alike, so the three cannot disagree about what a session is. Under exclusive
+  control the session is the managed file alone, so a heavier suppressed config no longer
+  fails a budget it never loads into, and a suppressed file's unmeasured server no longer
+  blocks the check as an unestablished cost — it is nobody's bill. Per-file totals are
+  untouched, every other client keeps one file as one session, and the baseline diff stays
+  per file, because a baseline pins a file artifact.
+
+## 0.19.0 — 2026-09-08
+
+- **The repository had no formatter, no linter, and `strict: true` as its only compiler flag.**
+  For a public project that is a standard held by hand, which works until it doesn't. Prettier
+  now formats `{src,tools,test,spec}/**/*.ts` and `vitest.config.ts` at `printWidth: 100` —
+  chosen because the 95th-percentile line already sat at 99 characters, so the config describes
+  the house style rather than replacing it. 82 TypeScript files moved, almost all of it line
+  breaking inside expressions.
+
+  What `.prettierignore` keeps out is the load-bearing half, and each entry has a reason rather
+  than a habit: `results/`, `badges/` and `spec/fixtures/` because those bytes *are* the product
+  and a measurement's JSON is hashed and re-derived by whoever disputes it; `docs/` and `dist/`
+  because regen rewrites them whole and `regenIsAFixedPoint` compares them byte for byte;
+  `*.md` because the line breaks in this project's prose carry meaning a formatter cannot see;
+  and `servers.yaml` because its entry order is the rotation's slot order, dealt by position in
+  `sweep/shard.ts`. Verified cosmetic rather than assumed: the suite, the bash badge tests and
+  the readiness gate all pass, and `git status` over `results/`, `docs/` and `badges/` is empty.
+
+- **Eight compiler flags, and 145 places that were assuming a hit.** `noUnusedLocals`,
+  `noUnusedParameters`, `noImplicitOverride`, `noFallthroughCasesInSwitch`, `noImplicitReturns`
+  and `verbatimModuleSyntax` cost three errors between them — and would have caught a dead
+  import left behind two commits earlier, which the linter found first. `noUncheckedIndexedAccess`
+  and `exactOptionalPropertyTypes` cost 142, which is the half worth having: every array index
+  and every record lookup in the codebase was assuming a hit.
+
+  The fixes are not `!` until it compiles. A lookup a published claim rests on now **refuses**:
+  `published-stats.ts` reads servers by name to fill sentences regen splices into the README, so
+  a missing one throws and names the server instead of formatting `undefined` into a page — that
+  is 40 of the 48 errors that file had. Where a guard on the line above already establishes the
+  value, `!` carries the reason beside it, because a throw there would be unreachable. And
+  `exactOptionalPropertyTypes` separated the record types from the parameter types: a CLI flag
+  that was not passed is `undefined`, so those interfaces read `?: T | undefined` now.
+  `Measurement` was widened for the same reason, and it is worth stating why that loses nothing —
+  `canonical.ts` assigns `undefined` deliberately so the key stays out of the JSON, and absent
+  and undefined read identically there.
+
+- **`typescript-eslint` cannot be used here, so the linter is oxlint.** No release, canary
+  included, accepts TypeScript 7 — the peer range stops at `<6.1.0`, and the parser calls TS 5
+  compiler APIs. oxlint has its own parser and no TypeScript peer dependency; what that costs is
+  the type-aware rules, which the eight compiler flags above are doing instead.
+
+  `correctness`, `perf` and `suspicious` are on: 215 findings. **89 were `no-array-sort`, and
+  they were the reason to bother** — `Array#sort` sorts in place, so each was mutating the array
+  it was handed, and one test was reordering the object under test. 39 sites had already noticed
+  and were paying for a defensive `[...x]` copy. They are `toSorted()` now, the copies are gone,
+  and `target` moves to ES2023 to say so (`engines` already required node >= 20). 19 more were
+  real and are fixed. The remaining 107 are four rules arguing with the codebase, turned off in
+  `.oxlintrc.json` with the reason written beside each: `consistent-function-scoping` (63) wants
+  test helpers hoisted out of the `describe` they read with; `no-await-in-loop` (39) fires 25
+  times in `tools/`, where the sequence is deliberate and `Promise.all` would turn a polite
+  crawl into a burst at someone's API; `no-underscore-dangle` (3) fires only on `_meta`, which
+  is the Model Context Protocol's own field name and not ours to rename; and `no-map-spread` (2)
+  is a rule about rebuilding objects in a `map` over a large collection, where both sites are
+  fixtures of ten.
+
+  CI runs `npm run typecheck`, `npm run format:check` and `npm run lint` before the suite. The
+  typecheck line is the configs rather than a bare `tsc --noEmit`, which had been checking `src`
+  and not `tools`.
+
+- **The 44 files under `test/` had never been typechecked.** `tsconfig.json` included only `src` and
+  `tsconfig.tools.json` only `src` and `tools`, and vitest transpiles without checking — so a
+  type assertion written in a test reported nothing while reading as a guarantee, which is why
+  the library-surface type pin had to move into `src/`. `tsconfig.test.json` covers `test/`,
+  `spec/` and `vitest.config.ts`, chained into `npm run typecheck`.
+
+  `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` are off in that config and nowhere
+  else, with the reason in the file: in `src` they stop an `undefined` reaching a published page,
+  and a test has no published output — a bad index there fails the assertion on the spot. The
+  shape that would pass silently is `expect(x[0]?.field).toBeUndefined()`, and the suite contains
+  none. Leaving them on would have cost 200 errors and 267 index reads acquiring a `!`.
+
+  38 errors, against a derivation of 66–84, and **one of them was not a fixture**:
+  `divergence.test.ts` was calling `row('abc')` where `row` spreads a `Partial<DivergenceRow>`,
+  so a *string* was being spread and `capturedSha256` silently stayed `'aaa…'` for every case.
+  The test named "is exactly what isCurrent would have hidden" had stopped exercising its `kept`
+  branch and passed anyway. The rest were fixtures short of a required field, each given the
+  value its own assertions imply rather than a placeholder that would make one vacuous.
+
+- **A pre-merge review found this work making the mistake it exists to remove.** Four dimensions,
+  27 claims, 11 refuted, 16 confirmed. Three places said "no test file is typechecked" — the
+  changelog, `core/index.ts`'s docblock and the comment in `test/core.test.ts` pointing at it —
+  and the commit that added `tsconfig.test.json` had falsified all three. They were the stated
+  *reason* the type pin lives in `src/`, so the pin now records the real one: it sits beside the
+  export list it pins.
+
+  It also caught this changelog overstating a guard. Re-probing all four moves: a type deleted
+  from its module and a type dropped from the barrel are `TS2724`; a **value** dropped from the
+  barrel is not a compile error, and the runtime list is what catches it. A fifth move is caught
+  by neither — a type *added* to the barrel without being added to the tuple compiles cleanly,
+  because TypeScript cannot enumerate a module's exported types at type level.
+
+  And five smaller ones: the README still advertised the `upstream/` composite-action patch this
+  release deletes, in a file that ships in the tarball; `.oxlintrc.json` justified a disabled
+  rule by citing a `_meta` key `deferral.ts` explicitly does *not* read; `ci.yml`'s comment
+  described a two-config world; `pr-check.ts` cited a deleted module; and the pull-request
+  template linked `../CONTRIBUTING.md`, which does not resolve from a rendered PR body. Two
+  claims were refuted rather than fixed, and the refutations are recorded in the commit.
+
+  `changelogCoversTheCommits` did not catch the half-written section this release nearly shipped,
+  because it asked only whether *some* entry exists. It checks presence, not coverage, and cannot
+  do better — entries do not cite commits. So it says so now, and prints the shipping commits
+  whenever there are more of them than entries.
+
+- **The library export was designed, shipped, and never declared. It is declared now.**
+  `src/core/index.ts` was written as the export a library would ship — `core/protocol.ts` says
+  so in words, and says why that module is kept out of it — but `package.json` had no `main`, no
+  `types` and no `exports`. So `import … from "mcp-context-cost"` did not work, while
+  `mcp-context-cost/dist/core/index.js` did, because nothing was there to stop it. It was a
+  public API in every sense except the one that would have made a change to it reviewable: the
+  barrel is `export *`, so its contents moved whenever any of its seven modules moved, and
+  removing five names from `core/session-start.ts` in this same section took them off the
+  published surface with nothing noticing.
+
+  `package.json` now declares `main`, `types` and an `exports` map pointing at that barrel, and
+  the barrel names its thirty-nine exports rather than re-exporting seven modules with `*`. The
+  wildcard was the mechanism: it made the API "whatever these modules happen to export", so a
+  name added to one widened the surface and a name removed narrowed it, both without anyone
+  deciding. Named, a name that leaves its module is a compile error in `core/index.ts`, and a
+  name added to a module does not reach the API until it is added there.
+
+  Four ways the surface can move, each verified by making the change and watching it fail. A
+  type deleted from its module, and a type dropped from the barrel, are compile errors
+  (`TS2724`). The thirty runtime exports are a list in `test/core.test.ts`, which is what
+  catches a *value* dropped from the barrel — that one is not a compile error, because nothing
+  downstream references it. The nine types are pinned by a type-only self-import in
+  `core/index.ts`, with a tuple length so the list cannot be shortened quietly.
+
+  **One move is caught by neither**, and the docblock says so rather than implying otherwise: a
+  type *added* to the barrel without being added to the tuple compiles cleanly, because
+  TypeScript cannot enumerate a module's exported types at type level. A widened type surface is
+  reviewable in the diff and nowhere else. The runtime list has no equivalent gap.
+
+  **This closes deep imports.** An `exports` map means `mcp-context-cost/dist/<anything>.js` now
+  fails with `ERR_PACKAGE_PATH_NOT_EXPORTED` where it used to resolve. That is the point of
+  declaring a surface, and it is a break for anyone who had reached past it — verified against a
+  packed tarball installed into a clean project, where the documented import works, a deep one
+  is refused, the CLI `bin` is unaffected, and a TypeScript consumer resolves the types.
+
+- **A fall was typeset two ways, depending on which copy of the formatter rendered it.**
+  Thirteen inline sign-formatters across `src/` ran three mutually inconsistent rules, and the
+  inconsistency reached the published pages: the leaderboard and the movement report wrote a
+  fall as `−369` while the dashboard and every server page's history column wrote the same fall
+  as `-369`, because those let `toLocaleString` supply the sign and its sign is a hyphen. The
+  dashboard also printed a server whose cost had not moved as `+0 over 4 sweeps`.
+
+  They now come from `src/core/format.ts`, which keeps the two intents apart rather than
+  collapsing them: `signed` is a magnitude with a direction and prints zero bare, while
+  `signedPctToPrecision` always carries a sign, because the cross-check column's `+0.0%` and
+  `−0.0%` are a small rise and a small fall and printing both as `0.0%` would delete the
+  difference. Regenerating moves 74 lines across the dashboard and six server pages; every one
+  of them is identical once the sign representation is normalised, and no measured number
+  changes.
+
+- **The instructions backfill had finished shrinking, so it is gone.**
+  `results/session-start.json` carried instructions for measurements taken before
+  `serverInstructions` existed, and `src/sweep/session-start.ts` said in its own docblock that it
+  was meant to shrink. It had: 87 of 103 measurements carry the field, the other 16 have no
+  capture and return before the backfill is consulted, and the leaderboard published zero floors.
+  The runner, the artifact, the npm script, the loader and the row types go with it — about 300
+  lines. The floor branch and its `≥` marker stay, because they remain the honest answer for a
+  measurement whose field is absent. Every published figure is byte-identical afterwards.
+
+- **A claim stated twice is a claim that can disagree with itself, including when a test holds
+  the copies together.** The deferral model was written out in full on both the front page and
+  the methodology page — five corrections in two days, each made twice — and
+  `test/published-deferral.test.ts` pinned both. It is now on the methodology page alone, with
+  the front page pointing at it and keeping only what it alone carries: the sample transcript and
+  the `claude --debug-file` self-check. The guard moved rather than shrank; the refusal count it
+  asserted moved to the page that now carries the model.
+
+  The same rule then applied to every other pair — the laptop rule, the failure taxonomy's
+  wording, an entry's own timeout comment, the OAuth-walled reason, the remote-entry probe, the
+  five-line re-derivation, the `--suggest` threshold, and the pull-request template's copy of the
+  whole procedure. Each had two copies and a test holding them to each other, which is not a fix
+  for a duplicated claim but maintenance of one. They link now, and the tests went with them. The
+  template's guard is inverted instead of deleted: it asserts the commands are absent there and
+  present in the guide, so a copy coming back fails. Cross-document overlap falls from 56
+  eight-word runs to 17, and every one that remains is a link's own description or a sentence
+  regen derives from `results/`.
+
+- **Foundations that had finished their job, and the comments that outlived them.**
+  `tools/backfill-tool-attribution.ts` has no remaining input — 1430 of 1430 tool rows carry both
+  attribution fields. `history.csv` has no short rows left, so the comment describing five- and
+  six-field writes described a shape that is gone. `core/bands.ts` still said the bands were "to
+  be frozen before launch" while the methodology page has said frozen since 2026-08-16 — and that
+  page's own heading still read "(provisional)" two lines above the sentence saying frozen.
+  `allHeaviestTools` said it was used by nothing and was; `percentiles` existed to freeze the
+  bands, a job finished on 2026-08-16. `upstream/action-patch.md` proposed badge output for
+  another project's action and told server maintainers to use it, contradicting what the README
+  tells them.
+
+- **`dashboard.ts` decided it was the entry point by filename suffix**, the form `src/sweep/run.ts`
+  warns against in a comment three of the other four entry points quote. It matches the resolved
+  path now. `cross-check.ts` also carried a second loader for `results/cross-check.json`,
+  byte-identical to `report.ts`'s, and seven places parsed `servers.yaml` inline while
+  `servers-schema.ts` already exported `loadServersDoc` to one caller.
+
+## 0.18.0 — 2026-09-08
+
+- **A base URL carrying a port was read as first-party, and the report called its tokens free.**
+  `baseUrlHost` compared `new URL(raw).hostname`; Claude Code compares `new URL(e).host` against a
+  one-entry list holding `api.anthropic.com` — read from the v2.1.233 bundle installed on the
+  machine this was written on, 2026-09-08. A host carries its port and a hostname does not, so
+  `ANTHROPIC_BASE_URL=https://api.anthropic.com:8443/v1` is a proxy to the client, which loads every
+  definition up front, and was first-party here, where the read fell through to the documented
+  default and printed *"These tokens are NOT loaded up front at any size"*.
+
+  That is the **understating** direction — telling a reader tokens are free where they are paid —
+  and `audit.ts` treats overstating as the safer of the two for exactly this reason. Both published
+  tables already said **host**, so the pages were right and the code was wrong: one line, no page
+  changes. `URL` drops a scheme's default port, so `https://api.anthropic.com:443` stays
+  first-party, and it stays first-party in the client too, because it is the same parser.
+
+- **A watch on the four sentences the deferral model is a reading of.** Every rule in
+  `src/audit/deferral.ts` is a reading of someone else's documentation, and the report's most
+  definite sentence comes out of it. Three of the four defects above had been wrong on published
+  pages for as long as the rules existed, and nothing could have caught any of them, because
+  nothing was watching the source — which has already moved host once under this project, from
+  `docs.claude.com` to `code.claude.com`.
+
+  `toolSearchDocProblems` in `src/audit/deferral.ts` is the rule, offline and under test;
+  `tools/watch-tool-search-docs.ts` is the half that fetches; `.github/workflows/tool-search-watch.yml`
+  runs it Thursdays 02:53 UTC, `contents: read`, writing no file. It checks **passages, not a page
+  hash** — a hash of a documentation page is red every week for a typo, and a watch people learn to
+  ignore is worse than no watch — plus one extraction: the list of variables the vendor says read
+  any non-empty value, so the disabling variable joining that list fails the run rather than
+  quietly invalidating the boolean rule.
+
+  A page that cannot be fetched fails the run and names itself, and a page that comes back too
+  short to be that page is read as could-not-look rather than as changed. Demonstrated, not just
+  documented: run live against all three pages it exits 0; pointed at a page that does not exist it
+  exits 1 saying nothing was checked against it; with one quote altered it exits 1 naming the rule
+  that rests on it.
+
+- **The organisation override was already in the audit's hands, and the report threw it away and
+  said the opposite.** From Claude Code v2.1.227 an organisation can keep tool search on under the
+  very variable that turns it off, through managed settings
+  (`code.claude.com/docs/en/llm-gateway-protocol.md`, read 2026-09-08).
+  `resolveToolSearchSources` read the disabling variable first and returned before
+  `ENABLE_TOOL_SEARCH` was ever consulted — so on a machine whose administrator tier carried the
+  override, the deciding value was sitting in the source records, printed by name three lines below
+  the verdict, and the verdict said *"Every request carries these tokens before you type anything"*.
+
+  The value that arms the override is in no vendor document, so this names none and claims nothing
+  about what it does. What it now says is narrower and checkable: where the administrator tier sets
+  `ENABLE_TOOL_SEARCH` to a value the vendor does not document, the disabling variable is not what
+  decides, so the posture is refused and the value is printed for the reader to check against their
+  own policy. A documented value there is not the override, and does not arm it — an administrator
+  who writes `"true"` following the published table has not turned anything on, and is not read as
+  though they had.
+
+  Scope-restricted to the administrator tier, because that is where the client reads it: the same
+  value in a shell or a user's own settings file arms nothing, and both directions are pinned.
+  Refused rather than answered because two of the override's own conditions are unreadable here —
+  the same page says it has no effect on a cloud provider or a Claude apps gateway sign-in — and
+  because the audit opens one of the four administrator sources the vendor documents. Every one of
+  those misses can only make the report over-state what a request carries.
+
+- **The `managed-settings.d` drop-ins are read, and a tier that disagrees with itself is refused.**
+  `code.claude.com/docs/en/managed-settings.md`, read 2026-09-08, gives the file source as
+  "`managed-settings.d/*.json` and `managed-settings.json` merged together" — one tier in the same
+  system directory. Only the single file was opened, so a policy split across drop-ins, which is
+  what the vendor recommends when several teams own parts of one policy, was invisible: the same
+  shape of miss as reading only the shell, which this fixed for settings files in 0.7.0.
+
+  New scope `managed-drop-in` in the published source records, listed beside the managed file
+  rather than below it — appended at the end, the precedence walk would have let a user's own
+  settings outrank an organisation's policy. The directory listing lives in
+  `managedDropInCandidates`, called from `discoverSettings`, so `settingsCandidates` keeps its
+  promise that nothing in it touches a disk. A directory that exists and cannot be listed is one
+  `unreadable` source rather than silence.
+
+  **The vendor does not say which file inside that tier wins**, so where the managed file and its
+  drop-ins set the same variable to different values the posture is refused (`sources-disagree`)
+  rather than answered by array order. Precedence *between* tiers is documented and that walk is
+  untouched.
+
+- **On Windows the audit opened the one managed-settings path the vendor says Claude Code does not
+  read.** `settingsCandidates` built `%ProgramData%\ClaudeCode\managed-settings.json`;
+  `code.claude.com/docs/en/managed-settings.md`, read 2026-09-08, gives the system directory as
+  `C:\Program Files\ClaudeCode\` and then says outright that "Claude Code doesn't read the legacy
+  Windows path `C:\ProgramData\ClaudeCode\managed-settings.json`". So a managed Windows machine had
+  its policy file read from a location that decides nothing, while the file that does decide was
+  never opened — and METHODOLOGY published the wrong path beside it. The `programData` parameter is
+  gone rather than corrected, since nothing else wants it. WSL's inheritance of the Windows policy
+  chain is still not modelled, and the docblock now says so instead of leaving it implied.
+
+- **`CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS` is a boolean flag, and reading its presence instead
+  told every machine that had set it to `0` that it pays the whole total on every request.**
+  `resolveToolSearch` tested bare truthiness after `.trim()`, so `0`, `false`, `off` and any other
+  non-empty value produced the report's most definite sentence — *"claude-code loads every tool
+  definition up front here … Every request carries these tokens before you type anything"* — at
+  machines that defer exactly as the documented default does.
+
+  `code.claude.com/docs/en/env-vars.md`, read 2026-09-08, states the convention: a variable that
+  turns a behaviour on or off reads `1` or `true` as on and `0` or `false` as off, in any casing.
+  The same page names the variables that instead read any non-empty value, and this is not one of
+  them. The Claude Code v2.1.233 bundle installed on the machine this was written on adds `yes`,
+  `on`, `no` and `off` to those sets, and running that client under each value — reading whether
+  its startup event lists the tool-search tool — confirmed the boolean reading: `1` off, and `0`,
+  `false`, `off` and `2` all leaving tool search on.
+
+  A value in neither set is now `setting-unrecognized` rather than a posture. The bundle leaves
+  tool search on there too, but that is one build of someone else's product, and *"these tokens are
+  NOT loaded up front"* is the costlier way to be wrong. `yes` and `on` are published on the
+  bundle's evidence alone and METHODOLOGY marks them as the one rule in that section resting on
+  something other than a published page.
+
+  **The half that is easy to miss** is in `resolveToolSearchSources`, which delegates to
+  `resolveToolSearch` with the betas variable alone: guarding only the flat function would have
+  read `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=0` beside `ENABLE_TOOL_SEARCH=false` as
+  `defers-all` — a new false claim in a costlier direction than the one being fixed. A value that
+  reads as false now falls through to the next variable, and a test pins it.
+
+  No mode was added and no refusal was added: every case lands in a posture both pages already
+  describe, so the refusal count on the front page is unchanged.
+
+- **A published report attributed 78% of github's capture to a field that server does not ship, and
+  nothing could see it.** `docs/state-of-mcp-context-cost.md` said *"81% of the capture is
+  annotations/outputSchema metadata a request never carries"*. github ships **no `outputSchema` at
+  all** and 1.7% annotations; the field actually dropped is `icons`, at 78%, which
+  `test/published-stats.test.ts` has recorded in writing since the equivalent caveat in the README
+  was made derived rather than hand-written. The same table row published github at 54,422 tokens
+  nineteen lines below the article's own headline of 54,622. `history.csv` dates 54,422 to
+  2026-08-16 and 54,622 to 2026-09-03, and the article closes by saying every number in it was read
+  from the data of 2026-09-04 — so that row came from a divergence row computed against bytes that
+  had already been re-swept: the staleness defect repaired in 0.11.2, published and then left
+  standing.
+
+  **Neither error was reachable by any check here.** The file was hand-written, outside `PAGE_FILES`,
+  and linked from both front pages. Regen never wrote it, so `regenIsAFixedPoint` — which walks
+  `git ls-files results docs README.md badges` — copied it unchanged into its scratch tree and
+  compared it against itself, passing unconditionally. Six further numbers in it had drifted the
+  same way unnoticed, among them a candidate count of 106 against today's 107 and a measured count
+  of 81 against 87.
+
+  Withdrawn rather than corrected. Bringing it under the existing guard would have meant sixteen
+  allow-list entries freezing prose nobody maintains, and the article was history with a reading
+  date attached — history that states a thing which was never true is not worth keeping for the
+  date's sake. Its two inbound links go with it, and `ROADMAP.md` phase 5 describes the report
+  it wants instead of numbering it against a withdrawn one.
+
+  **The address could not be withdrawn with the page.** It is printed in the README of every
+  release from 0.10.0 to 0.17.0, and a published tarball cannot be edited, so a reader who
+  installed any of them still holds the link. The path now answers with a withdrawal notice
+  rather than a 404: what the report got wrong, that it is not coming back in that form, and
+  where the live numbers are. Putting hand-written prose back at the address that produced this
+  defect is safe under one property only — that it states no number — so `page-numbers.test.ts`
+  holds it to that, and to the two dates it is a record of. Both halves are mutation-checked: a
+  percentage in the prose fails the first, a third date the second. The `v1` Action tag still
+  points at a tree whose README carries the link and is not moved for this, because `release.yml`
+  moves it only when `action.yml` changes, and re-pointing every consumer's workflow at newer
+  code to repair a link is the worse trade.
+
+  Two changelog entries went with the page. Both described it in the present tense as a live
+  document — one that a dated correction sat above its text, the other that it kept a six-week
+  sentence — about a file that no longer exists. The entry under 0.10.0 announcing the report
+  stands: that release is the first whose README carries the link, and someone installing it
+  still gets one.
+
+- **Eleven published numbers were measured over a protocol revision the server picked, and nothing
+  recorded that.** Every session this harness opens says which MCP revision it speaks, and the
+  server answers with the one it will actually use — a normal part of the handshake, and the server
+  is entitled to name a different one. That answer was read into memory and dropped; no record
+  carried it, so how often it differed was not a small number, it was an unknown.
+
+  Measured, not assumed: run 34161745581 (2026-09-07) asked all 104 launchable entries under the
+  published isolation and wrote nothing. **88 answered. 77 named `2025-06-18`, the revision asked
+  for. 11 named an older one** — `bitbucket-mcp`, `brave-search-legacy`, `chroma`, `github-legacy`,
+  `gitlab`, `google-maps`, `markitdown`, `postgres`, `puppeteer` and `slack-legacy` answer
+  `2024-11-05`, and `n8n-mcp` answers `2025-03-26`. None named anything newer.
+
+  **Those measurements stand, and the probe deliberately does not hang up on them.** The
+  specification says a client "MUST disconnect" if it *cannot support* the version the server
+  returns, and that condition is the whole rule: this probe sends `initialize`,
+  `notifications/initialized` and a paginated `tools/list`, and all three are unchanged across
+  `2024-11-05`, `2025-03-26` and `2025-06-18`. Disconnecting on a difference rather than on an
+  inability would have withdrawn eleven working numbers — about a tenth of the leaderboard — and
+  published a protocol complaint where there is no protocol problem, which is the same kind of
+  claim-beyond-the-evidence this changelog's entry above is about. The case that genuinely cannot be
+  driven is a server speaking only `2026-07-28`, which has no `initialize` at all; that one fails
+  the handshake and is already `protocol-mismatch`.
+
+  Every record now carries both halves — the revision asked for and the revision answered — and
+  `release-readiness` prints a non-blocking note listing any record where they differ. Both halves
+  on purpose: a record holding only the answer would have to be read against whatever the pinned
+  constant said at the time somebody read it, so the day that pin moves, every record taken before
+  it would start reading as a disagreement about a run that agreed perfectly. The fields fill one
+  server at a time as the three-week rotation comes round; no existing record is backfilled, because
+  the handshake was never persisted anywhere.
+
+- **`audit` told a user their working remote server was `unreachable` — its own word for "no MCP
+  answer arrived" — about an endpoint that had answered.** Under revision 2026-07-28 a server that
+  does not support the protocol version a request carries MUST answer `400 Bad Request`
+  (`schema/2026-07-28/schema.ts:476`, read 2026-09-08), and it names the versions it does speak in
+  the error's `data.supported`. `classify` in `audit/remote.ts` had no 400 branch, so such a reply
+  fell through to `unreachable`, printed in the *not measured* block and counted against the budget
+  gate as a cost that could not be established.
+
+  The probe now reads the body — but only on an error status that is not 401 or 403, and only the
+  first 8 KB of it. The reason bodies were never read is stated in that file and is about success:
+  an event stream stays open for the life of a session, and a probe is not a session. That reason
+  does not reach a finite error response. A `-32022` in the body is reported as
+  `protocol-mismatch`, the same word the sweep uses one layer down, naming the revisions the server
+  offered; a 400 that is not that refusal — a malformed request earns one too — stays
+  `unreachable`, because reading it as a protocol refusal would be a claim about someone else's
+  server made from a fact about this harness.
+
+  Three entries are `remote: true` (`linear`, `zapier`, `vercel`). All three answer 401 today, so no
+  published or printed row moves. `release-readiness` also gained a non-blocking note for when the
+  *released* package's pinned revision falls behind the specification — read from both homes the
+  constant has had, since it moved into `src/core/protocol.ts` after the last release and a check
+  that knew only the new path would have reported "could not read" on every push until the next one.
+
+- **A server that speaks only MCP `2026-07-28` would have been published as `startup-failure` — a
+  status whose own definition calls itself "a claim about someone else's code".** That revision
+  removed the `initialize` handshake in favour of `server/discover` (`LATEST_PROTOCOL_VERSION` at
+  `schema/2026-07-28/schema.ts:30`, read 2026-09-08), and this probe pins `2025-06-18`. A server
+  implementing only the new revision has no `initialize` handler, so it answers `METHOD_NOT_FOUND`;
+  `classifyFailure` tested for a timeout, then for credential words, then fell through. The
+  re-sweep publishes on a cron holding `contents: write`, and `failsCheck` red-fails a
+  contributor's pull request on that status, so the claim would have gone out under the
+  maintainer's name, on a schedule, about working software.
+
+  **A new status, `protocol-mismatch`.** The entry launched, the transport worked and the server
+  answered; the only reason there is no number is the revision this repository pins. It passes the
+  pull-request check for the same reason `auth-required` does — failing a stranger's entry over our
+  own pin is the same category error, one layer up. It claims only that a request was refused
+  naming the method or the revision, never that the server speaks any particular revision: only the
+  server's own `data.supported` establishes that, and the note now quotes it verbatim.
+
+  Two codes reach it, anchored differently, which the first version of the rule got wrong.
+  `METHOD_NOT_FOUND` (-32601) is meaningful only against a *method*, so it counts only when it
+  answers `initialize` — answering `tools/list` it means the server exposes no tools, which is the
+  server's own property and stays a `startup-failure`. `UNSUPPORTED_PROTOCOL_VERSION` (-32022) is
+  meaningful only against a *version*: it appears in no revision before `2026-07-28` (`2025-11-25`
+  has neither the constant nor `server/discover`), and that revision carries the protocol version
+  in a per-request `_meta` field, so any request can be the one refused. Anchoring it to
+  `initialize` as well would have published `startup-failure` about a working server, which is the
+  failure this entry is about.
+
+  Rendering a JSON-RPC error changed with it. The message now names the method it answers and
+  carries the error's `data`, because a `-32601` answering `initialize` and one answering
+  `tools/list` were byte-identical before and neither said which. `data` is placed *before* the
+  server's own message rather than after: notes are clamped by cutting the tail, and for `-32022`
+  the `data` is where the server names the revisions it does speak. Two published records take
+  their notes through that path, `magic` and `keboola`; both gain about twenty characters, both stay
+  far inside the cap, and both keep `auth-required`.
+
+  **Blast radius: zero.** No record in `results/` carries `-32601`, `-32022`, `method not found`,
+  `protocol version`, `server/discover`, `unsupported protocol` or `2026-07-28` — 0 of 103 the day
+  this landed. This is a forward-looking guard, not the repair of an observed breakage, and the
+  number stays 0 until a server moves.
+
+- **The page declared `badge-sightings/v2` and published a row that v1 had judged.** The
+  adoption reading of 2026-09-07 (f86da0a) records `"method": "badge-sightings/v2"`, and the page
+  built from it closes with "Method `badge-sightings/v2`". Of the 43 rows in its table, 42 were
+  found and judged that day. The forty-third — `bbingz/engram`, `macos/EngramMCPTests/EngramMCPExecutableTests.swift`
+  — was last seen on **2026-09-03**: GitHub code search did not return it in the 2026-09-07
+  run, so it was carried forward with the verdict it already had, **names the project, no
+  badge**, decided under v1, when the test for naming the project was whether the file
+  contained the string the search had matched. Read at the commit the page links to
+  (`d97d0257`), that file's only occurrence of the name is
+  `temp.appendingPathComponent("mcp-context-cost-list-visible.sqlite")` — a temporary file's
+  name — and it carries no reference to the repository, the npm package or the pages site.
+  **The predicates were never wrong**: `classifyFile` on those bytes returns `phrase` today and
+  `namesProject` returns false. What was wrong is that nothing re-derived a carried-forward
+  verdict, so the method named on the page described 42 of its 43 rows.
+
+  **A record is now published under a method's name only if that method judged it**, in three
+  parts, because no one of them holds on its own. Every sighting records the method that judged
+  it (`judgedBy`); a record that does not say — every reading written before this — is taken as
+  this reading's exactly when its *last seen* is this reading's own date, and as unknown
+  otherwise. Every carried-forward record is re-judged on each run, re-read at the
+  commit-pinned URL the record itself carries, so the same evidence the old verdict came from
+  is judged again under today's rule; *last seen* does not move, because the search did not see
+  the file. And a record this reading's method has not judged is not printed in its table: it
+  goes below it, under **Judged under an earlier rule**, with the version that did judge it
+  named beside it. Re-judging alone would fail on the day a re-read fails and republish the
+  stale verdict exactly as before. Expiring every unseen record would hold, and would throw away
+  what `mergeSightings` exists to keep — a badge that vanishes must stay visible as one that
+  vanished, not as one that never was. Recording the version alone repairs nothing. The
+  re-judgement is the repair; the recorded version is what stays true when the repair cannot
+  run. **The published count does not move and could not have**: it is made only of rows whose
+  *last seen* is the reading's own date, and those were judged on it. It is zero, and it was
+  zero.
+
+  **The honest count of genuine third-party mentions on 2026-09-07 is 1, not 2.** The engram row
+  is a phrase, and it now sits under the earlier rule's name until a reading re-reads it —
+  `adoption.yml` on **1 Oct**, or `gh workflow run adoption.yml` sooner. This laptop is not where
+  readings are taken, so `results/badge-adoption.json` is untouched and only the page rendered
+  from it moves. The one mention that remains is `lethanhson9901/repo-dashboard`,
+  `src/data/reddit/community_news/mcp.json` — **the maintainer's own Reddit comment, scraped into
+  somebody else's dashboard**. It names the project because the person who wrote the words named
+  it, and that is not somebody else referring to this project. Nothing in such a file tells the
+  two apart, so the page now says so among the things it cannot see: the mention rows are an
+  upper bound on who has referred to this project and never a count of reach. The limit is
+  published rather than that row discounted in code, because provenance is not derivable from
+  the file — a hand-written sentence about one row would rot beside a table that regenerates,
+  and the limit is true of every such row.
+
+- **Three clients were printed as having no deferral on record, and all three vendors had
+  said the opposite — one of them eight months earlier.** For a Cursor, Codex CLI or VS Code
+  config, `audit` printed "No default deferral is on record for <client>, so every request
+  carries these tokens before you type anything — an absence of a record about the client, not
+  a measurement of it". The sentence was careful about the right thing and wrong anyway,
+  because the rule behind it read exactly one surface: METHODOLOGY §who-pays said each client's
+  own MCP configuration page had been read, and those pages say nothing about deferring. They
+  still say nothing. **Cursor's engineering blog described its MCP deferral on 2026-01-06** —
+  the agent gets tool names and pulls a tool's description and schema on demand — and Cursor
+  staff repeated it on Cursor's own forum on 2026-07-22, adding that Cursor does not put every
+  attached tool's complete schema in every request. **Codex CLI defers by default since
+  openai/codex#29486, merged 2026-06-22** and first stable in `rust-v0.142.2` on 2026-06-25: it
+  defers every effective MCP tool behind its tool-search tool when the model supports that tool
+  and the provider supports namespaced tools. **VS Code documents a 128-tool cap per chat
+  request** and virtual tools above a threshold defaulting to 128, and its agent host defers MCP
+  and non-core tools behind a tool-search tool with the setting on by default in source
+  (microsoft/vscode#326213, merged 2026-07-23), gated to the GPT-5.4/5.5/5.6 and Claude 4.5+
+  families. A rule that consults one page cannot tell a vendor that does not defer from a vendor
+  that documents deferring elsewhere, and for eight months it reported the first while the second
+  was true.
+
+  **What counts as a record is now written down, because that is the part that was wrong.**
+  METHODOLOGY §who-pays takes four kinds of first-party statement: the client's own
+  documentation, the vendor's dated blog or changelog, a named staff account on the vendor's own
+  forum, and the client's public source — a merged pull request or a settings default in the
+  shipping tree. **None of the four is a measurement**, and the report is written so it cannot
+  be mistaken for one. `cursor`, `codex` and `vscode` resolve to a new posture,
+  `deferral-on-record`, which prints what the vendor states, what that record leaves open, and
+  every source with the date it was read. It does not print a verdict, and deliberately does not
+  discount the total either: that would be the same error in the other direction. VS Code's entry
+  says so in its first line — its record is a cap and a pair of conditions, not a default.
+
+  **The posture cannot be read off the machine for any of the three, and each refuses for its own
+  reason.** Codex's `config.toml` has no switch: the two keys that once forced the behaviour,
+  `tool_search` and `tool_search_always_defer_mcp_tools`, are marked removed and skipped when the
+  features table is applied, though both still appear in the published config schema. The
+  condition that decides it — the model's support for the search tool and the provider's for
+  namespaced tools — is read from the running session. Cursor documents no setting for the
+  mechanism at all. VS Code's two switches live in its own settings rather than in the
+  `.vscode/mcp.json` this audit reads, and **which VS Code release runs Copilot sessions on that
+  agent host by default is not established here**, which the report says rather than assumes.
+  Cursor's context tray is not a check on our number either: staff describe its count as a
+  calibrated estimate rather than a tokenizer count. **Nothing published here has measured any
+  client** — Claude Code's entry included, which is a reading of Anthropic's documentation and
+  says so.
+
+  **The six that stay are now an absence that was searched for.** Claude Desktop, Windsurf,
+  Gemini CLI, Zed, Kiro and Goose keep the old sentence, and the three of them that are open
+  source — Gemini CLI, Zed, Goose — were searched on 2026-09-07 for a tool-search or deferral
+  mechanism, with nothing found; the other three are closed and only their pages have been read.
+  Two published sentences went with the fix. The front page opened by telling every reader that
+  a server's schemas ride along on every single request, which is false for Claude Code's
+  default and for these three, and now states both cases; the second was on a page since
+  withdrawn. Tests: `audit-clients.test.ts` gains a block that requires every discovered client
+  to have been decided, refuses a record without dated sources or without conditions, and pins
+  each of the three against the words the report prints; `published-deferral.test.ts` reads the
+  new paragraphs on both pages against the resolver. Mutation-checked six ways — putting `cursor`
+  back among the clients with no record fails nine tests across three files, and stripping a
+  date, turning VS Code's record into a verdict, or reverting either page's paragraph each fail
+  their own. The sixth is the branch itself: everything it prints is quotation, so a record that
+  does not arrive is refused rather than fallen through, because the next branch is Claude Code's
+  threshold arithmetic and it renders as "deferral activates once the definitions reach 0 tokens"
+  over a client that has no threshold.
+
+- **"Names the project" was a substring test on the string the search had just matched, so it
+  could not fail.** The widest adoption query asks GitHub code search for `mcp-context-cost`,
+  and every file it nominated was then judged by `classifyFile`: does this file contain
+  `mcp-context-cost`? It does — that is why the search returned it — so every candidate
+  without a badge was published as **names the project**, and `docs/adoption.md` grew a table
+  of 41 files under that label. Read at the commits the page itself links to, **none of the 41
+  refers to this project**. Eight files in `shuji-bonji/ai-agent-architecture` carry the phrase
+  only inside links to `…/understanding-llm-through-claude-code/06-tool-context/mcp-context-cost`,
+  a chapter on an unrelated site whose URL slug happens to be the name; the eighteen in
+  `shuji-bonji/understanding-llm-through-claude-code` are that site's own source. Eight in
+  `nikbearbrown/humanitarians-youtube` name three video-reel directories called
+  `mcp-context-cost-meter`. The rest are a SQLite filename, an entry in a JSON list of project
+  names, and the words in prose. Not one names the repository, the npm package or the pages
+  site. A reader looking at that table for evidence of reach was reading a list of
+  coincidences, on the one page this project keeps about itself.
+
+  The judgement is now `namesProject`, and it asks for a reference to something that **is** the
+  project: the repository as `athakur3/mcp-context-cost` (which is how a GitHub URL, the raw
+  badge JSON, a clone command and a `uses:` line all spell it), the npm package (`npx -y
+  mcp-context-cost`, an install command, a dependency entry, its npmjs.com page), or
+  `athakur3.github.io/mcp-context-cost`. Each form must end where the name ends, so
+  `mcp-context-cost-meter` and `mcp-context-costs` are somebody else's. The bare name in prose
+  is deliberately outside the rule — it is how someone would write about this project, and
+  equally how they would write about a chapter or a directory called the same, and nothing in
+  the file tells the two apart. Such a file is not dropped: it is a third sighting kind,
+  `phrase`, listed under **matches the phrase only**, so the candidate count still has a list
+  under it. The page now states what each label requires rather than leaving a reader to guess
+  which one it meant.
+
+  **The published number does not move.** It is zero and it was zero: none of the 41 carries a
+  badge, and the rule for what displays one is untouched. What moves is what the rows say about
+  themselves. The method id goes `badge-sightings/v1` → `v2`, because a reading is worth what
+  its rule is worth and these are two rules; while the committed reading is a v1 one, the page
+  says so and says its rows carry the earlier judgement. **Refreshing it is a run, and this
+  laptop is not where readings are taken**: the next scheduled `adoption.yml` is **1 Oct**, and
+  `gh workflow run adoption.yml` takes one sooner. Three fixtures drive the tests — the foreign
+  URL slug, the `-meter` directories, and a README that runs `npx -y mcp-context-cost` — and the
+  first two classify as `mention` under the old rule and `phrase` under this one.
+
+- **The release's own proof step waited on the wrong document, and could not fail.** `0.17.0`
+  published cleanly and then went red on the last step with `ETARGET`: the step waited on
+  `npm view "mcp-context-cost@$VERSION"`, which passed on its first attempt, and then ran `npx`,
+  which could not resolve that version seconds later. They do not read the same thing. The
+  registry serves a **full** packument to `Accept: application/json` and an **abbreviated** one
+  to `application/vnd.npm.install-v1+json` from the same URL under
+  `Vary: accept-encoding, accept` — separately cached objects, each with its own ETag and its own
+  `max-age=300`, which can differ in age by minutes. `npm view` reads the first and `npx`
+  resolves against the second, so a green probe on one says nothing about the other. There is no
+  better probe, either: only the command itself resolves the path the command takes. The wait now
+  wraps the `npx` invocation, inside the temp directory that makes it prove anything at all.
+  A second defect came out of the same reading, and it arrived in the same commit rather than
+  before it: the old wait had **no guard after it**, so ten failed probes would have fallen through
+  with status 0 into the very command they were waiting for. That never happened — across the six
+  releases that ran the step the wait never once exhausted — so this is a hazard removed, not a
+  failure repaired. The distinction is the point: the *wait* could not have reported a problem, and
+  the *step* around it could and did, twice. The published tarball was fine throughout and was
+  verified by hand minutes later. Three tests, each of which fails against the old step, and the
+  one that certifies the retry now pins the npx call's position inside the loop rather than the
+  loop's mere presence — the weaker form was walked through by a reconstruction that probes
+  `npm info` and leaves npx outside.
+
+## 0.17.0 — 2026-09-06
+
+- **A probe for a question the published numbers cannot answer about themselves.** Every
+  measurement here was captured by a client declaring `capabilities: {}` at `initialize` — it
+  can do nothing, and says so. That is not a neutral posture: the protocol lets a server shape
+  its tool list around what the client declares, and at least one does. The reference
+  `everything` server exposes 13 tools to a client declaring nothing and 15 to one declaring
+  roots and elicitation, the extra two being `get-roots-list` and `trigger-elicitation-request`,
+  one per capability, worth 197 tokens in this project's own unit. For any server that gates
+  tools that way the published number is a floor, and the methodology does not say so. Nobody
+  knows how many servers that is, so `tools/capability-probe.ts` measures each entry twice under
+  identical conditions, differing only in the declaration, and reports the difference.
+  `capability-probe.yml` runs it read-only: no write token anywhere in the job, both captures
+  with `persist: false`, and the answer leaves as a downloadable artifact rather than a commit,
+  so nothing published can move even if the probe is wrong. It writes that summary after every
+  row rather than once at the end, because measuring every entry twice is the longest job in the
+  repository and the likeliest to meet its 120-minute cap: a run that stops at 99 servers should
+  report the 99 it reached, not nothing. The posture it compares against
+  declares only what this harness can answer truthfully — an empty root list and a declined
+  elicitation are states a real client can be in, while `sampling` would claim it can ask a
+  model for a completion, which it cannot. **Nothing is changed by this.** What the sweep
+  declares decides published numbers and their hashes, so moving it is a methodology decision;
+  this is the evidence that decision wants, gathered first.
+
+- **The answer: one server in eighty-seven.** The probe above ran across the whole set in CI,
+  under sweep isolation, each entry captured twice. Of the **87** entries that could be compared,
+  **one** exposes a different tool set to a client declaring `roots` and `elicitation`: the
+  reference `everything` server, which gains `get-roots-list` and `trigger-elicitation-request`,
+  two tools and 197 tokens. That is the server built to exercise every part of the protocol, so
+  it is the one entry where this was most likely to show. Nothing else moved, no server lost a
+  tool, and no server's status differed between the two postures. So the floor this harness
+  measures against is real and it is narrow, and **it keeps declaring nothing**: declaring more
+  would move the published number and the `canonicalSha256` of every affected capture, and on
+  this evidence it would buy 197 tokens on one demonstration server. `docs/METHODOLOGY.md` now
+  states the choice and the reading, because a reader is entitled to know that the number is a
+  floor and by how much. The first run of the probe reported 24 entries as "not comparable" and
+  seven of those were the probe's own fault — it passed the timeout and the env var names but not
+  the image, the env values or the apt packages, so seven servers this project publishes as
+  measured never launched properly. "Not comparable" reads as a fact about a server; it was a
+  fact about the instrument. Fixed, re-run, and the seven are in the 87.
+
+- **The README stops asking to be trusted about deferral.** Everything this project says about
+  which clients hold MCP tool definitions back is read from Anthropic's documentation, which is
+  exactly the kind of second-hand claim it refuses to leave unchecked in other people's numbers.
+  Claude Code writes its own decision to a debug log before it sends anything, so the page now
+  shows the two commands that make a reader's own machine answer, and what the three line shapes
+  mean: the startup guess, which is labelled optimistic because it can be revised; the
+  `Dynamic tool loading: 0/N deferred tools included` line that settles it; and the base-URL
+  fallback firing in the client's own words. It also says to read the later requests rather than
+  the first, because a stdio server can finish connecting after the first request has gone and an
+  early low count is a race rather than a finding. And it names the mode most likely to surprise:
+  `auto` reads as the careful setting and is the one that loads everything up front below its
+  threshold, by design. No number from any one machine is published — the reader measures their
+  own, which is the only version of this claim worth making.
+
+- **Every server page now says which machine made the number.** `isolation.arch` has been
+  recorded on each measurement since 0.12.0 and was rendered nowhere, so a reader could see the
+  image and the network a number was captured under but not the architecture — the one condition
+  that decides whether a package could run at all. `local-mcp` is exactly why the field exists:
+  published as a broken server on the strength of a run whose real finding was the machine. A
+  field recorded and never shown fixes nothing. The pages print it beside the image, and records
+  made before the field shipped read `architecture not on record` rather than borrowing a value
+  from their neighbours, because absent means unknown and never "the same as yours".
+  METHODOLOGY gains a short section saying the thing the dataset could not say about itself:
+  **every published number was measured on Linux on an x86-64 runner, and nothing here has been
+  measured on macOS or Windows.** It also states why a package's *declared* platform support is
+  not promoted into a claim about where it runs — a declaration that restricts is enforced, and
+  npm's refusal to install `safari-mcp` off macOS is quoted in that entry's record, while a
+  declaration that permits is the author's word and can be false: `local-mcp` widened its
+  declaration to include Linux on 2026-08-14 and still had no Linux runtime when this project
+  measured it three weeks later. So the restricting kind is cited and the permitting kind is not.
+
+- **The per-tool table now names the output schema, which was the largest thing it left
+  unnamed.** A tool's row broke its tokens into a description and an input schema and folded
+  everything else — `outputSchema`, `annotations`, `title`, `icons`, `execution` — into the
+  tool's total with nothing pointing at it. Tokenizing each field across the 87 measured servers
+  (1,430 tools, 608,522 tokens) puts input schemas at 47.2% of every published token,
+  descriptions at 21.7% and **output schemas at 16.8%**, shipped by 30 of the 87. So on a third
+  of the pages a reader could see that a tool was expensive and not what made it so:
+  xcodebuildmcp's `snapshot_ui` is 2,139 tokens of which the description is 45 and the input
+  schema 51, and the 1,997-token output schema that is the rest of it appeared nowhere.
+  `ToolMeasurement` gains `outputSchemaTokens` and `annotationsTokens`, and the server pages
+  gain an output-schema column — only on the pages that have one, because a column of zeroes on
+  the other 57 is a worse page rather than a more complete one. Annotations are recorded per
+  tool and get no column, at roughly 3% of the set.
+
+  **No published number moves.** Both fields count bytes that were already inside `tokens`, and
+  `totalTokens` and `canonicalSha256` are counted over the canonical array, which is untouched —
+  byte-identical either side of the change, including in the golden spec fixture.
+  `tools/backfill-tool-attribution.ts` filled the fields in on all 87 existing records by
+  re-tokenizing the capture stored in each file, launching nothing and reaching no network; it
+  refuses to write any record whose stored numbers disagree with its own capture, and none did.
+  A test now re-derives every published record's whole per-tool breakdown from that record's own
+  capture, so a hand-edited number fails the suite.
+
+- **A README sentence that was wrong about which bytes get dropped, found by the attribution
+  above.** The Claude table said `most of the capture is \`annotations\`/\`outputSchema\` metadata
+  Claude never sees` about github. github ships **no `outputSchema` at all** and 924 tokens of
+  annotations — 1.7% of its capture. The 42,830 tokens an Anthropic request drops are `icons`,
+  78% of the whole thing. The claim was plausible, hand-written, and unmaintained, which is the
+  shape this project has been bitten by before, so the fix is not a better sentence: the field
+  and its share are now derived from the capture by `heaviestDroppedField` and patched in by the
+  same regen that maintains the numbers beside them. They move when the capture moves.
+
+- **Two projects are called octocode and the leaderboard only ever showed the name.** This
+  repository's `octocode` row is the npm package `octocode-mcp`, published from
+  `bgauryy/octocode`. `Muvon/octocode` is an unrelated Apache-2.0 Rust project with a built-in
+  MCP server, and nothing here has ever launched it. Someone who works on the second one read
+  the row as theirs and posted a public correction about how their server had been filed —
+  reasonably, because the leaderboard prints `name` and nothing else, and the package id and
+  repository are one click away on the detail page. Entries may now declare `nameCollision`
+  (`project`, `source` URL, `readOn` date, validated like a deprecation and rejected if it
+  points at the entry's own repo), the leaderboard grows a derived **Same name, different
+  project** section that says what each row measures and what it is not, and the server page
+  carries the same line for a reader who arrived from a badge. Declared, never detected: two
+  projects picking one word is a fact about the world and the only honest source is someone
+  noticing. **The entry is not renamed** — `name` keys `results/<name>/`, `badges/<name>.json`,
+  the capture index and every history row, so a rename moves published identifiers to fix a
+  label.
+
+## 0.16.0 — 2026-09-06
+
+
+What reaches an installer is `audit`: a threshold that now states the assumption underneath it,
+and two new exports. Everything else here is the machinery that keeps the published numbers
+honest, and three of the four items are the same shape — something that was supposed to be
+checked was not being checked, and nothing said so.
+
+- **`audit` says what window its `auto` threshold is a share of.** `ENABLE_TOOL_SEARCH=auto`
+  defers once tool definitions reach a percentage of the context window, so the token figure the
+  report prints is only as right as the window behind it. The report stated that window twice
+  already, in the header and in the share line, but never as the *assumption the threshold rests
+  on*, and never with the flag that changes it. Which window a client uses is a property of its
+  model, which no config file states and this audit cannot read. Observed 2026-09-06 on one
+  machine, and unreachable to a reader: a session on a model with a 1,000,000-token window logged
+  its own threshold as `100000`, where this audit's default assumption gives 20,000. What a
+  reader *can* check is the arithmetic and the fix — `--context 1000000` makes the report print
+  100,000, so the assumption was the only thing wrong. The direction is why this is not a
+  footnote: `crosses` is `clientTokens.low >= thresholdTokens`, so a window assumed too small
+  makes the verdict read *at or above* more often, which is the answer that tells a reader their
+  definitions are deferred and therefore not charged when a client on a larger window would have
+  loaded every one up front. Only threshold mode reaches this; the default defers at any size,
+  where no window enters the answer.
+
+- **Two snapshots nobody was comparing.** `results/divergence.json` does not ship, so an
+  installed copy converts wire tokens to client tokens through the constant compiled into it, and
+  that constant is a snapshot of a run that keeps moving. The suite held the constant *on trunk*
+  to the run committed beside it; nothing held the one on npm, which only a release can move.
+  `tools/release-readiness.ts` now reads that constant at the last version-bump commit and asks
+  `bandSnapshotProblem`, the same rule the suite asks of trunk — deliberately not equality, since
+  the run grows whenever a sweep reaches a new server and the bot that commits it cannot edit a
+  TypeScript constant. A snapshot may lag; it may not be wrong. Separately, `isolation.arch`
+  exists because `local-mcp` was published as a broken server when the finding was the machine,
+  and three tests held how that value is *derived* while nothing checked that the records carry
+  it: every record measured since 0.12.0 now must, or be the one case that honestly cannot, a
+  command that is itself a `docker run`. New exports: `BAND_PRECISION` and `bandSnapshotProblem`.
+  The band's precision is stated once and quoted everywhere it is printed: three regen-maintained
+  claims across README and METHODOLOGY, and the three places `audit` prints it in its own report,
+  which were still on literals until this release finished the job.
+
+- **The rotating re-sweep could not publish, and only a dispatch found it.** The step that runs
+  the suite before a bot commit exists because a push made with `GITHUB_TOKEN` starts no
+  workflow, so no CI run has ever fired on one. It was placed before the regen it depends on.
+  `sweep-all` writes the leaderboard, `history.csv`, `regressions.md` and the tool vectors; the
+  capture index, the tool-shape baseline, the server pages, the dashboard and the numbers patched
+  into README came from `regen.ts` alone, which ran inside the commit step after the rebase. So
+  between the sweep and regen the tree is *known* to be inconsistent, and three exact drift
+  guards failed by construction: the capture index, the published page numbers, and the
+  tool-shape baseline. Run 33997431756 on 2026-09-05, the first re-sweep after the guard landed
+  that morning, measured its slice, failed those three, skipped its commit and threw the slice
+  away. The next scheduled Wednesday would have done the same. The job now stages what it
+  measured, rebases, and rebuilds in one step, runs the suite against *that* tree, and pushes it,
+  so the guard reads the bytes the push publishes and the rebase sits inside the checked region.
+  Run 33999205923, forty minutes later, is the proof: green through the guard, and the slice
+  published. `test/workflows.test.ts` holds the order for both jobs that publish data, and fails
+  against the previous file.
+
+- **The rotation is three weeks wide, decided by dispatching it.** A movement in
+  `results/regressions.md` carries a date window as wide as the cycle that produced it, and six
+  weeks describes the observation schedule rather than the server. Two readings of the same
+  34-server slice on 2026-09-05, an hour apart on cold runners: measuring took 3m46s and 5m17s,
+  cross-checking 2m44s and 2m01s, against the job's 120-minute cap. 29 of those 34 produced a
+  number; the other five are auth-required, startup-failure and not-applicable records, which is
+  the ordinary shape of a slice. The long end is the three half-set runs of 2026-09-04, the
+  longest this job has recorded: 65m28s, 62m07s and 61m17s over slices of 52 and 51 servers, and
+  only the 61m17s one carried the `anki` and `grafana` timeouts since fixed. So the schedule now
+  cuts the list into three, every row comes round within three Wednesdays, and `resweep.yml`
+  carries the timings beside the number they chose. README, METHODOLOGY and CONTRIBUTING say
+  three where they said six.
+
+- **What the rotation published while this was going on.** The slice that run 33999205923
+  finally pushed re-read 34 records and moved exactly two costs: `comfyui-mcp` 50,640 → 50,776
+  (+136, `0.52.189` → `0.52.199`) and `desktop-commander` 11,834 → 11,837 (+3, **still**
+  `0.2.48`, which is the case that word was added for). No status changed. What a reader sees
+  move is larger than those two rows: README — which ships — now says **13 moved up against 5
+  that moved down** where it said 11 and 6; `results/regressions.md` repartitions from
+  17 moved / 64 held / 6 uncompared to **18 / 64 / 5** with the net going +4,446 → +4,587; the
+  release column reads `2 of 18` movements able to name a release on both sides where it read
+  `0 of 17` eleven hours earlier the same day; `desktop-commander`'s published movement is
+  replaced rather than extended, flipping from a −2 downward mover to a +3 upward one; and the
+  two shields endpoints those projects can embed change value. Nothing is back-filled and
+  nothing can be — the rotation is what fills that column in, and at three weeks it fills twice
+  as fast.
 
 ## 0.15.0 — 2026-09-05
 
@@ -884,7 +1838,7 @@ enforce it. All three are fixed, and each is now a named test.
 - **The data gets its first state-of report.** The roadmap's "periodic data summary, when
   the deltas tell a story" — the deltas now do. Six findings, every number read from the
   data of 2026-09-04 and linked to its measurement, published as a dated reading at
-  [docs/state-of-mcp-context-cost.md](docs/state-of-mcp-context-cost.md) and linked from the
+  `docs/state-of-mcp-context-cost.md` and linked from the
   front page and README's status section. A dated essay is allowed to be a snapshot for the
   same reason adoption.md is: it says its date, and the live numbers stay the leaderboard's.
 

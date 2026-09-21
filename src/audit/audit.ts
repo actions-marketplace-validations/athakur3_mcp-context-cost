@@ -26,6 +26,7 @@ import type { ConfiguredServer, LoadedConfig } from './config.js';
 import type { RemoteProbe } from './remote.js';
 import {
   evaluateDeferral,
+  BAND_PRECISION,
   PUBLISHED_WIRE_TO_CLIENT_RATIO,
   SHELL_SOURCE,
   type DeferralVerdict,
@@ -33,6 +34,13 @@ import {
   type ToolSearchSource,
 } from './deferral.js';
 import { formatDiff, formatGate, type AuditDiff, type IncreaseGate } from './diff.js';
+import { signed } from '../core/format.js';
+import {
+  evaluateMcpPolicy,
+  type DenyVerdict,
+  type McpPolicyEvaluation,
+  type UnevaluatedEntry,
+} from './mcp-policy.js';
 
 export const DEFAULT_CONTEXT_WINDOW = 200_000;
 
@@ -55,23 +63,23 @@ export interface AuditServerResult {
   toolCount: number | null;
   /** Share of this config's measured total, 0–1. */
   share: number | null;
-  command?: string;
-  url?: string;
+  command?: string | undefined;
+  url?: string | undefined;
   /** Names only — a server's env values never enter a report. */
   envVarNames: string[];
   /** Names only, and only for a remote entry that carries any — values never enter a report. */
-  headerNames?: string[];
+  headerNames?: string[] | undefined;
   /** Claude Code's `alwaysLoad: true`, read from the entry: loads at session start whatever the setting. */
-  alwaysLoad?: true;
-  canonicalSha256?: string | null;
+  alwaysLoad?: true | undefined;
+  canonicalSha256?: string | null | undefined;
   /**
    * Anthropic-request cost from the published Claude divergence run, only when
    * its captured hash matches this install (`--claude`). `null` means the
    * install doesn't match what was published — silence, not a stale guess.
    * `undefined` means `--claude` wasn't requested at all.
    */
-  claudeTokens?: number | null;
-  notes?: string;
+  claudeTokens?: number | null | undefined;
+  notes?: string | undefined;
 }
 
 export interface HeaviestTool {
@@ -131,9 +139,18 @@ export interface AuditConfigResult {
   heaviestTools: HeaviestTool[];
   trimAdvice: TrimAdvice | null;
   /** Present only when `--suggest` ran with a usable baseline. */
-  suggestions?: ConfigSuggestions;
+  suggestions?: ConfigSuggestions | undefined;
   /** Present only when `--changed` ran with a usable capture index. */
-  captureVerdicts?: ServerCaptureVerdict[];
+  captureVerdicts?: ServerCaptureVerdict[] | undefined;
+  /** Set on the managed MCP file's own row (see managedMcpPath in config.ts). */
+  managed?: true | undefined;
+  /**
+   * Set on a claude-code config that is measured here but does not load in a
+   * session, because a managed MCP file has exclusive control. The value is
+   * that file's path. The measurement stands — it is a fact about this file —
+   * and every session-level claim belongs to the managed file instead.
+   */
+  suppressedByManagedMcp?: string | undefined;
   /**
    * Whether this client loads the total up front or defers it, and — when the
    * client decides that by a threshold — which side of it this stack is on.
@@ -198,10 +215,13 @@ export interface BudgetFit {
  * need, and dropping by weight will sometimes name the one you cannot live without. That
  * caveat is printed with the result rather than left implied.
  */
-export function planBudgetFit(config: AuditConfigResult, limit: number): BudgetFit {
+export function planBudgetFit(
+  config: Pick<AuditConfigResult, 'servers' | 'totalTokens'>,
+  limit: number,
+): BudgetFit {
   const measured = config.servers
     .filter((srv) => typeof srv.tokens === 'number' && (srv.tokens as number) > 0)
-    .sort((a, b) => (b.tokens as number) - (a.tokens as number));
+    .toSorted((a, b) => (b.tokens as number) - (a.tokens as number));
 
   const overBy = config.totalTokens - limit;
   const drop: BudgetFitStep[] = [];
@@ -252,20 +272,67 @@ export interface AuditReport {
      * against the whole stack and the verdict fails rather than passing on a
      * total that understates by an unknown amount.
      */
-    unestablished?: string[];
+    unestablished?: string[] | undefined;
     /** Present only when over budget: the arithmetic of getting back under it. */
-    fit?: BudgetFit;
+    fit?: BudgetFit | undefined;
   };
+  /**
+   * What each session loads, one row per session scope — for claude-code the
+   * files one session reads together (the managed file alone where deployed),
+   * with denylist removals already applied and named. Config rows above stay
+   * file facts; this is the session fact, and it is what `--budget` gates.
+   */
+  sessions?:
+    | {
+        client: string;
+        sources: string[];
+        totalTokens: number;
+        contextShare: number;
+        deniedTokens?: number | undefined;
+      }[]
+    | undefined;
+  /**
+   * Present when the managed MCP file exists on this machine. `exclusive`
+   * means a claude-code session loads only its servers; `disabled` that it is
+   * deployed with an empty server map, so no MCP server loads at all;
+   * `unreadable` that it exists and could not be read, so which servers a
+   * session loads cannot be said. `suppressed` names the claude-code configs
+   * measured here that do not load under it. Source:
+   * code.claude.com/docs/en/managed-mcp.md, read 2026-09-09.
+   */
+  managedMcp?:
+    | {
+        path: string;
+        state: 'exclusive' | 'disabled' | 'unreadable';
+        error?: string | undefined;
+        suppressed: string[];
+      }
+    | undefined;
+  /**
+   * Claude Code's MCP allowlist/denylist, as read from the settings files this
+   * audit opens, evaluated over the claude-code session's servers. Deny
+   * matches are applied — those servers are left out of the session-level
+   * sums, never out of a file's own total; allow verdicts are reported and
+   * never applied (mcp-policy.ts says why the two differ). Absent when no read
+   * settings file sets either list.
+   */
+  mcpPolicy?:
+    | {
+        denied: (DenyVerdict & { tokens: number | null })[];
+        denyUnevaluated: UnevaluatedEntry[];
+        allow?: McpPolicyEvaluation['allow'];
+      }
+    | undefined;
   /** Present only when a divergence run was supplied (`--claude`). */
-  claudeDivergence?: { model: string; measuredAt: string };
+  claudeDivergence?: { model: string; measuredAt: string } | undefined;
   /** Which published tool-shape baseline `--suggest` read its percentiles from. */
-  toolShape?: { generatedAt: string; toolCount: number; serverCount: number };
+  toolShape?: { generatedAt: string; toolCount: number; serverCount: number } | undefined;
   /** Which published capture index `--changed` joined against. */
-  captureIndex?: { generatedAt: string; captureCount: number };
+  captureIndex?: { generatedAt: string; captureCount: number } | undefined;
   /** Present only when a baseline report was supplied (`--baseline`). */
-  diff?: AuditDiff;
+  diff?: AuditDiff | undefined;
   /** Present only when `--max-increase` was supplied alongside a baseline. */
-  increaseGate?: IncreaseGate;
+  increaseGate?: IncreaseGate | undefined;
   problems: string[];
 }
 
@@ -285,10 +352,14 @@ function envSignature(s: ConfiguredServer): string {
   const env = s.env ?? {};
   const headers = s.headers ?? {};
   return JSON.stringify([
-    Object.keys(env).sort().map((k) => [k, env[k]]),
+    Object.keys(env)
+      .toSorted()
+      .map((k) => [k, env[k]]),
     // A remote's headers decide what it serves the way env decides for a
     // process: a bearer token selects an account, and an account its tools.
-    Object.keys(headers).sort().map((k) => [k, headers[k]]),
+    Object.keys(headers)
+      .toSorted()
+      .map((k) => [k, headers[k]]),
   ]);
 }
 
@@ -299,7 +370,9 @@ function envSignature(s: ConfiguredServer): string {
  * message is not redaction.
  */
 function secrets(s: ConfiguredServer): string[] {
-  return [...Object.values(s.env ?? {}), ...Object.values(s.headers ?? {})].filter((v) => v.length >= 4);
+  return [...Object.values(s.env ?? {}), ...Object.values(s.headers ?? {})].filter(
+    (v) => v.length >= 4,
+  );
 }
 
 function redact(text: string | undefined, values: string[]): string | undefined {
@@ -353,6 +426,70 @@ function measuredOk(m: Measurement): boolean {
  */
 const ONE_SESSION_PER_CLIENT = new Set(['claude-code']);
 
+/**
+ * One session's composition: which files load together, which servers that
+ * actually is once the managed file and the denylist have spoken, and the
+ * sums over exactly that set. The one home for "what does a session load" —
+ * the deferral verdict, the report's `sessions` array and the `--budget` gate
+ * all read it, so they cannot disagree about what a session is.
+ */
+interface SessionComposition {
+  client: string;
+  /** Every config in the scope, suppressed ones included. */
+  group: Omit<AuditConfigResult, 'deferral'>[];
+  /** The configs the session actually loads (managed-aware). */
+  sessionCfgs: Omit<AuditConfigResult, 'deferral'>[];
+  sources: string[];
+  /** Session servers after the denylist. */
+  servers: AuditServerResult[];
+  totalTokens: number;
+  /** Tokens a clean deny entry removed from this session. */
+  deniedTokens: number;
+  skippedRows: { source: string; name: string; status: string }[];
+  sharedSum: number;
+}
+
+function composeSessions(
+  built: Omit<AuditConfigResult, 'deferral'>[],
+  opts: {
+    shared: Map<Omit<AuditConfigResult, 'deferral'>, number>;
+    managedActive?: 'exclusive' | 'disabled' | undefined;
+    deniedNames?: Set<string> | undefined;
+  },
+): Map<string, SessionComposition> {
+  const scopes = new Map<string, Omit<AuditConfigResult, 'deferral'>[]>();
+  for (const cfg of built) {
+    const key = deferralScopeKey(cfg.client, cfg.source);
+    const group = scopes.get(key);
+    if (group) group.push(cfg);
+    else scopes.set(key, [cfg]);
+  }
+  const out = new Map<string, SessionComposition>();
+  for (const [key, group] of scopes) {
+    const isCc = ONE_SESSION_PER_CLIENT.has(group[0]!.client);
+    const sessionCfgs = isCc && opts.managedActive ? group.filter((c) => c.managed) : group;
+    const denied = isCc ? (opts.deniedNames ?? new Set<string>()) : new Set<string>();
+    const all = sessionCfgs.flatMap((c) => c.servers);
+    const servers = all.filter((s) => !denied.has(s.name));
+    out.set(key, {
+      client: group[0]!.client,
+      group,
+      sessionCfgs,
+      sources: sessionCfgs.map((c) => c.source),
+      servers,
+      totalTokens: servers.reduce((a, s) => a + (s.tokens ?? 0), 0),
+      deniedTokens: all.filter((s) => denied.has(s.name)).reduce((a, s) => a + (s.tokens ?? 0), 0),
+      skippedRows: sessionCfgs.flatMap((c) =>
+        c.skipped
+          .filter((s) => !denied.has(s.name))
+          .map((s) => ({ source: c.source, name: s.name, status: s.status })),
+      ),
+      sharedSum: sessionCfgs.reduce((a, c) => a + (opts.shared.get(c) ?? 0), 0),
+    });
+  }
+  return out;
+}
+
 /** Which configs share a deferral verdict. */
 function deferralScopeKey(client: string, source: string): string {
   return ONE_SESSION_PER_CLIENT.has(client) ? client : `${client}\0${source}`;
@@ -367,45 +504,41 @@ function attachDeferral(
   configs: Omit<AuditConfigResult, 'deferral'>[],
   contextWindow: number,
   opts: {
-    env?: ToolSearchEnv;
-    settings?: ToolSearchSource[];
-    divergence?: DivergenceRun | null;
+    env?: ToolSearchEnv | undefined;
+    settings?: ToolSearchSource[] | undefined;
+    divergence?: DivergenceRun | null | undefined;
     /**
      * Per config, how many of its counted servers were measured as another
      * entry's twin. Keyed by the built config itself rather than by source,
      * because that is what the scopes below are grouped from.
      */
     shared: Map<Omit<AuditConfigResult, 'deferral'>, number>;
+    /** What each session loads, from `composeSessions` — the one home for it. */
+    sessions: Map<string, SessionComposition>;
   },
 ): AuditConfigResult[] {
-  const scopes = new Map<string, Omit<AuditConfigResult, 'deferral'>[]>();
-  for (const cfg of configs) {
-    const key = deferralScopeKey(cfg.client, cfg.source);
-    const group = scopes.get(key);
-    if (group) group.push(cfg);
-    else scopes.set(key, [cfg]);
-  }
-
   const verdicts = new Map<string, DeferralVerdict>();
-  for (const [key, group] of scopes) {
+  for (const [key, comp] of opts.sessions) {
+    // The composition already speaks the managed file's exclusivity and the
+    // denylist: what reaches evaluateDeferral is what the session loads, and
+    // suppressed configs still share the verdict object so their rows can
+    // point at it.
     verdicts.set(
       key,
       // Computed against the same context window the share uses, so any
       // threshold moves with `--context` instead of being pinned to 200,000.
       evaluateDeferral(
         {
-          client: group[0].client,
-          sources: group.map((c) => c.source),
-          servers: group.flatMap((c) =>
-            c.servers.map((s) => ({
-              name: s.name,
-              tokens: s.tokens ?? 0,
-              claudeTokens: s.claudeTokens,
-              ...(s.alwaysLoad ? { alwaysLoad: true } : {}),
-            })),
-          ),
-          skippedCount: group.reduce((a, c) => a + c.skipped.length, 0),
-          sharedMeasurements: group.reduce((a, c) => a + (opts.shared.get(c) ?? 0), 0),
+          client: comp.client,
+          sources: comp.sources,
+          servers: comp.servers.map((s) => ({
+            name: s.name,
+            tokens: s.tokens ?? 0,
+            claudeTokens: s.claudeTokens,
+            ...(s.alwaysLoad ? { alwaysLoad: true } : {}),
+          })),
+          skippedCount: comp.skippedRows.length,
+          sharedMeasurements: comp.sharedSum,
         },
         { contextWindow, env: opts.env, settings: opts.settings, divergence: opts.divergence },
       ),
@@ -427,35 +560,35 @@ export function buildReport(
   configs: LoadedConfig[],
   measured: Map<string, Measurement>,
   opts: {
-    contextWindow?: number;
-    budget?: number;
-    generatedAt?: string;
+    contextWindow?: number | undefined;
+    budget?: number | undefined;
+    generatedAt?: string | undefined;
     /** Published `tools-delta/v1` run to join against (`--claude`); omit to skip the join. */
-    divergence?: DivergenceRun | null;
+    divergence?: DivergenceRun | null | undefined;
     /** Published `tool-shape/v1` baseline (`--suggest`); omit to skip suggestions. */
-    toolShape?: ToolShapeBaseline | null;
+    toolShape?: ToolShapeBaseline | null | undefined;
     /** Published `capture-index/v1` (`--changed`); omit to skip the version join. */
-    captureIndex?: CaptureIndex | null;
+    captureIndex?: CaptureIndex | null | undefined;
     /**
      * The audited machine's SHELL tool-search variables. Passed in rather than
      * read here so this stays pure and a report is reproducible from its
      * inputs; `runAudit` supplies the real environment. Omitted means the shell
      * set nothing.
      */
-    env?: ToolSearchEnv;
+    env?: ToolSearchEnv | undefined;
     /**
      * The other place those variables come from: Claude Code's own settings
      * files, highest precedence first, as `loadSettingsSources` read them.
      * `runAudit` supplies these. Omitted means they were not read here — which
      * the report says, rather than reporting a default it did not establish.
      */
-    settings?: ToolSearchSource[];
+    settings?: ToolSearchSource[] | undefined;
     /**
      * What each remote endpoint said to an unauthenticated `initialize`, keyed
      * by `serverKey`. `runAudit` supplies it from `probeRemotes`; omitted, a
      * remote entry is reported as not probed rather than as anything else.
      */
-    remotes?: Map<string, RemoteProbe>;
+    remotes?: Map<string, RemoteProbe> | undefined;
   } = {},
 ): AuditReport {
   const contextWindow = opts.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
@@ -473,6 +606,43 @@ export function buildReport(
   // the other client's entry just the same.
   const collapsed = collapsedKeys(configs);
   const shared = new Map<Omit<AuditConfigResult, 'deferral'>, number>();
+
+  // The managed MCP file, when present, decides what a claude-code session
+  // loads (config.ts: managedMcpPath). Detected before the build, so every
+  // claude-code row can say which side of that fact it is on.
+  const managedCfg = configs.find((c) => c.client === 'claude-code' && c.managed);
+  const otherCc = configs.filter((c) => c.client === 'claude-code' && !c.managed);
+  const managedState = managedCfg
+    ? managedCfg.error
+      ? ('unreadable' as const)
+      : managedCfg.servers.length
+        ? ('exclusive' as const)
+        : ('disabled' as const)
+    : undefined;
+  const managedActive = managedState === 'exclusive' || managedState === 'disabled';
+
+  // The claude-code session's servers, managed-aware — taken at the config
+  // level because policy entries match argv and URL, which built rows drop.
+  const ccSessionServers = managedActive
+    ? managedState === 'exclusive'
+      ? managedCfg!.servers
+      : []
+    : otherCc.flatMap((c) => c.servers);
+  const policy = evaluateMcpPolicy(
+    ccSessionServers.map((s) => ({
+      name: s.name,
+      transport: s.transport,
+      argv: s.argv,
+      url: s.url,
+    })),
+    (opts.settings ?? []).map((s) => ({
+      scope: s.scope,
+      source: s.source,
+      state: s.state,
+      policy: s.mcpPolicy,
+    })),
+  );
+  const deniedNames = new Set(policy.denied.map((d) => d.server));
 
   for (const cfg of configs) {
     if (cfg.error) {
@@ -512,7 +682,12 @@ export function buildReport(
       if (s.transport === 'remote') {
         const probe = opts.remotes?.get(serverKey(s));
         if (!probe) {
-          skipped.push({ ...base, ...none, status: 'unreachable', notes: `${s.url ?? 'url'} — not probed` });
+          skipped.push({
+            ...base,
+            ...none,
+            status: 'unreachable',
+            notes: `${s.url ?? 'url'} — not probed`,
+          });
           continue;
         }
         if (probe.kind === 'auth-walled') {
@@ -528,15 +703,41 @@ export function buildReport(
           });
           continue;
         }
+        if (probe.kind === 'protocol-mismatch') {
+          // The endpoint works. What it refused is the revision this audit
+          // sends, which is a fact about this harness — so the row says that,
+          // and not that nothing answered. Wired here explicitly because the
+          // block below reads anything it has not tested as open and hands it
+          // to the bridge.
+          skipped.push({
+            ...base,
+            ...none,
+            status: 'protocol-mismatch',
+            notes: `${s.url} answered ${probe.detail} — this audit speaks a revision it does not`,
+          });
+          continue;
+        }
         if (probe.kind === 'unreachable') {
-          skipped.push({ ...base, ...none, status: 'unreachable', notes: `${s.url}: ${probe.detail}` });
+          skipped.push({
+            ...base,
+            ...none,
+            status: 'unreachable',
+            notes: `${s.url}: ${probe.detail}`,
+          });
           continue;
         }
         // Open: measured through the bridge, and read below like any launch.
       }
       const m = measured.get(serverKey(s));
       if (!m) {
-        skipped.push({ ...base, status: 'startup-failure', tokens: null, toolCount: null, share: null, notes: 'not measured' });
+        skipped.push({
+          ...base,
+          status: 'startup-failure',
+          tokens: null,
+          toolCount: null,
+          share: null,
+          notes: 'not measured',
+        });
         continue;
       }
       if (!measuredOk(m)) {
@@ -559,7 +760,11 @@ export function buildReport(
         toolCount: m.toolCount,
         share: null, // filled once the total is known
         canonicalSha256: m.canonicalSha256,
-        claudeTokens: opts.divergence ? (isCurrent(divRow, m.canonicalSha256 ?? null) ? divRow.claudeDelta : null) : undefined,
+        claudeTokens: opts.divergence
+          ? isCurrent(divRow, m.canonicalSha256 ?? null)
+            ? divRow.claudeDelta
+            : null
+          : undefined,
         notes: m.status === 'dynamic' ? redact(m.notes, secrets(s)) : undefined,
       });
       for (const t of m.tools) {
@@ -591,15 +796,27 @@ export function buildReport(
       trimAdvice: buildTrimAdvice(tools, totalTokens),
       suggestions: opts.toolShape ? buildSuggestions(shapePool, opts.toolShape) : undefined,
       captureVerdicts: opts.captureIndex
-        ? ok.map((s) => ({ name: s.name, verdict: identify(s.canonicalSha256, opts.captureIndex!) }))
+        ? ok.map((s) => ({
+            name: s.name,
+            verdict: identify(s.canonicalSha256, opts.captureIndex!),
+          }))
         : undefined,
+      ...(cfg.managed ? { managed: true as const } : {}),
+      ...(managedActive && cfg.client === 'claude-code' && !cfg.managed
+        ? { suppressedByManagedMcp: managedCfg!.source }
+        : {}),
     };
     built.push(result);
     shared.set(result, sharedHere);
   }
 
   built.sort((a, b) => b.totalTokens - a.totalTokens);
-  const results = attachDeferral(built, contextWindow, { ...opts, shared });
+  const sessions = composeSessions(built, {
+    shared,
+    managedActive: managedActive ? managedState : undefined,
+    deniedNames,
+  });
+  const results = attachDeferral(built, contextWindow, { ...opts, shared, sessions });
 
   const report: AuditReport = {
     methodologyVersion: METHODOLOGY_VERSION,
@@ -611,8 +828,39 @@ export function buildReport(
     problems,
   };
 
+  report.sessions = [...sessions.values()].map((s) => ({
+    client: s.client,
+    sources: s.sources,
+    totalTokens: s.totalTokens,
+    contextShare: s.totalTokens / contextWindow,
+    ...(s.deniedTokens > 0 ? { deniedTokens: s.deniedTokens } : {}),
+  }));
+
+  if (managedCfg && managedState) {
+    report.managedMcp = {
+      path: managedCfg.source,
+      state: managedState,
+      ...(managedCfg.error ? { error: managedCfg.error } : {}),
+      suppressed: managedActive ? otherCc.map((c) => c.source) : [],
+    };
+  }
+  if (policy.sources.length) {
+    const ccServers = built.filter((b) => b.client === 'claude-code').flatMap((b) => b.servers);
+    report.mcpPolicy = {
+      denied: policy.denied.map((d) => ({
+        ...d,
+        tokens: ccServers.find((s) => s.name === d.server)?.tokens ?? null,
+      })),
+      denyUnevaluated: policy.denyUnevaluated,
+      ...(policy.allow ? { allow: policy.allow } : {}),
+    };
+  }
+
   if (opts.divergence) {
-    report.claudeDivergence = { model: opts.divergence.model, measuredAt: opts.divergence.measuredAt };
+    report.claudeDivergence = {
+      model: opts.divergence.model,
+      measuredAt: opts.divergence.measuredAt,
+    };
   }
 
   if (opts.toolShape) {
@@ -631,23 +879,30 @@ export function buildReport(
   }
 
   if (typeof opts.budget === 'number') {
-    // The worst config is the gate: passing because your *lightest* client fits
-    // would be a green check on a session you don't run.
-    const worst = results[0];
+    // The worst SESSION is the gate — decided 2026-09-09. A context window
+    // belongs to one session, and for claude-code a session loads two files
+    // together (or the managed file alone, minus what the denylist removed);
+    // gating the worst file passed a budget the session it belongs to blows.
+    // Passing because your *lightest* client fits would still be a green check
+    // on a session you don't run, so the costliest one is the gate.
+    const worst = [...sessions.values()].toSorted((a, b) => b.totalTokens - a.totalTokens)[0];
     // A total is only a ceiling to compare against if it is the whole cost. A
-    // server that failed to start contributes 0, so the stack reads lighter
+    // server that failed to start contributes 0, so the session reads lighter
     // than it is and the budget passes on a number that is missing a server —
-    // exactly the PR the README says this gate catches. The server-level gate
-    // (core/server-diff.ts) already refuses this; so does this one now. Every
-    // skipped row counts: an auth-walled endpoint is a working server the
+    // exactly the PR the README says this gate catches. Every skipped row of
+    // every session counts: an auth-walled endpoint is a working server the
     // session pays for with its credential, and an unreachable one is a cost
-    // this could not establish, not a cost of zero.
-    const unestablished = results.flatMap((c) => c.skipped.map((s) => `${c.source}: ${s.name} (${s.status})`));
+    // this could not establish, not a cost of zero. What no session loads — a
+    // config the managed file suppresses, a server the denylist removed — is
+    // nobody's bill, so it does not count.
+    const unestablished = [...sessions.values()].flatMap((s) =>
+      s.skippedRows.map((r) => `${r.source}: ${r.name} (${r.status})`),
+    );
     const over = (worst?.totalTokens ?? 0) > opts.budget;
     report.budget = {
       limit: opts.budget,
       worstTotal: worst?.totalTokens ?? 0,
-      worstSource: worst?.source ?? '(none)',
+      worstSource: worst ? worst.sources.join(' + ') || '(none)' : '(none)',
       over: over || unestablished.length > 0,
       // Named so the reader knows which way the number is wrong: the total
       // understates by however much these cost, which nobody knows.
@@ -685,7 +940,8 @@ function settingPhrase(d: DeferralVerdict): string {
   if (!s.readFromMachine) return `${s.variable} is unset here, which is the documented default`;
   // A base URL is reported by hostname only (see ToolSearchSetting.value), so it
   // is phrased as where the variable points and never as what it equals.
-  if (s.variable === 'ANTHROPIC_BASE_URL') return `${s.variable} points at ${s.value} on this machine`;
+  if (s.variable === 'ANTHROPIC_BASE_URL')
+    return `${s.variable} points at ${s.value} on this machine`;
   return `${s.variable}=${s.value} on this machine`;
 }
 
@@ -721,8 +977,9 @@ function postureSourceLines(d: DeferralVerdict): string[] {
     const held =
       r.state === 'unreadable'
         ? 'could not be read — what it sets is unknown'
-        : [r.sets.length ? `sets ${r.sets.join(', ')}` : '', unreadableVars].filter(Boolean).join(', and ') ||
-          'sets none of them';
+        : [r.sets.length ? `sets ${r.sets.join(', ')}` : '', unreadableVars]
+            .filter(Boolean)
+            .join(', and ') || 'sets none of them';
     // Which place the verdict came out of, said once rather than left to a
     // reader to work out from two lists.
     const decided = d.setting?.source === r.source ? ', which decided this' : '';
@@ -732,7 +989,7 @@ function postureSourceLines(d: DeferralVerdict): string[] {
     lines.push(`    ${absent} other settings file(s) it reads are not on this machine`);
   }
   if (!recs.some((r) => r.scope !== 'shell')) {
-    lines.push("    its settings files were NOT read here, so what they set is unknown");
+    lines.push('    its settings files were NOT read here, so what they set is unknown');
   }
   return lines;
 }
@@ -763,9 +1020,69 @@ function sharedMeasurementLines(
     ...consequence,
   ];
   if (d.isFloor) {
-    lines.push(`  ${skippedNames} server(s) here also produced no number — see "not measured" above.`);
+    lines.push(
+      `  ${skippedNames} server(s) here also produced no number — see "not measured" above.`,
+    );
   }
   return lines;
+}
+
+/**
+ * What the threshold below is a share *of*, said where the threshold is said.
+ *
+ * The setting is a percentage of the context window, so the token figure it
+ * resolves to is only as right as the window this audit assumed. That window is
+ * a property of the model the client runs, which no config file states and this
+ * audit therefore cannot read: it uses 200,000 unless `--context` overrides it.
+ * A model with a larger window puts the threshold proportionally higher, and a
+ * stack that clears a 20,000-token threshold does not clear a 100,000-token one.
+ *
+ * This is stated rather than silently assumed because the error has a direction.
+ * A window assumed too small makes the threshold too small, which pushes the
+ * verdict toward "at or above" — toward telling a reader their tool definitions
+ * are deferred, and therefore not charged, when the client's own larger
+ * threshold would have loaded every one of them up front. Of the two ways to be
+ * wrong here, that is the one that costs somebody tokens they were told they
+ * would not pay, so it does not get to be a footnote.
+ *
+ * Only threshold mode reaches this. The default defers everything at any size,
+ * where no window and no arithmetic enter the answer at all.
+ */
+function thresholdAssumptionLines(d: DeferralVerdict): string[] {
+  const share = d.thresholdShare ?? 0;
+  if (!(share > 0) || d.thresholdTokens === null || d.thresholdTokens === undefined) return [];
+  const window = Math.round(d.thresholdTokens / share);
+  return [
+    `  That token figure assumes a ${n(window)}-token context window, which is a`,
+    '  property of the model in use and not of your config, so this audit cannot',
+    '  read it — pass --context to set it. A model with a larger window has a',
+    '  proportionally larger threshold, and the same stack can fall on either',
+    '  side of it depending on which model the client runs.',
+  ];
+}
+
+/**
+ * One indented item, wrapped to a terminal width with a hanging indent.
+ *
+ * The records these print are prose, not labels, and the alternative was
+ * hand-wrapping sentences in the data — which puts the line breaks of a report
+ * inside the thing the report is quoting, and moves them every time a word
+ * changes.
+ */
+function bullet(text: string, width = 92): string[] {
+  const out: string[] = [];
+  let line = '';
+  for (const word of text.split(' ')) {
+    const next = line ? `${line} ${word}` : word;
+    if (line && next.length + 4 > width) {
+      out.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+  }
+  if (line) out.push(line);
+  return out.map((l, i) => (i === 0 ? `    ${l}` : `      ${l}`));
 }
 
 /** Where a threshold is in play, the unknown size is the whole verdict. */
@@ -807,18 +1124,21 @@ function deferralLines(d: DeferralVerdict, skippedNames: number): string[] {
   // Read from the entries, so it is stated up front rather than listed among
   // the conditions a reader has to check: whatever the setting says, these load.
   if (d.mechanism === 'tool search' && d.alwaysLoad.servers.length) {
-    const n = d.alwaysLoad.servers.length;
+    const pinned = d.alwaysLoad.servers.length;
     lines.push(
-      `  ${n} server${n === 1 ? ' is' : 's are'} pinned "alwaysLoad": true and load${n === 1 ? 's' : ''} at session start whatever`,
+      `  ${pinned} server${pinned === 1 ? ' is' : 's are'} pinned "alwaysLoad": true and load${pinned === 1 ? 's' : ''} at session start whatever`,
     );
-    lines.push(`  the setting says: ${d.alwaysLoad.servers.join(', ')} — ${d.alwaysLoad.tokens.toLocaleString()} wire tokens,`);
+    lines.push(
+      `  the setting says: ${d.alwaysLoad.servers.join(', ')} — ${d.alwaysLoad.tokens.toLocaleString()} wire tokens,`,
+    );
     lines.push('  left out of any threshold comparison below.');
   }
 
   if (d.mode === 'client-unknown') {
     lines.push('  Which client reads this config is not known here, so whether it defers');
     lines.push('  tool definitions by default is not known either. Read as loaded up front.');
-    if (d.sharedMeasurements > 0) lines.push(...sharedMeasurementLines(d, skippedNames, SIZE_UNKNOWN));
+    if (d.sharedMeasurements > 0)
+      lines.push(...sharedMeasurementLines(d, skippedNames, SIZE_UNKNOWN));
     return lines;
   }
 
@@ -826,16 +1146,49 @@ function deferralLines(d: DeferralVerdict, skippedNames: number): string[] {
     lines.push(`  No default deferral is on record for ${d.client}, so every request`);
     lines.push('  carries these tokens before you type anything — an absence of a record');
     lines.push('  about the client, not a measurement of it.');
-    if (d.sharedMeasurements > 0) lines.push(...sharedMeasurementLines(d, skippedNames, SIZE_UNKNOWN));
+    if (d.sharedMeasurements > 0)
+      lines.push(...sharedMeasurementLines(d, skippedNames, SIZE_UNKNOWN));
+    return lines;
+  }
+
+  // A vendor's record, printed with everything it does not settle attached to
+  // it. The shape is Claude Code's, minus the half this cannot have: what is on
+  // record, that nothing here measured it, and — because no config file on the
+  // audited machine states the posture — no verdict about which way this stack
+  // goes. Reporting the total as deferred away would be the same error the
+  // absence-of-a-record rule was written against, in the opposite direction.
+  if (d.mode === 'deferral-on-record') {
+    const r = d.record;
+    // The mode without its record is not a milder version of this answer, it is
+    // no answer: everything below is quotation. Falling through from here would
+    // reach the threshold branch and print Claude Code's arithmetic over a
+    // client that has none.
+    if (!r) {
+      lines.push(`  ${d.client} is on record as deferring tool definitions, and the record`);
+      lines.push('  itself did not reach this report — so nothing is claimed about who pays.');
+      return lines;
+    }
+    for (const l of r.states) lines.push(`  ${l}`);
+    for (const l of r.notReadable) lines.push(`  ${l}`);
+    lines.push('  So read this total as what the definitions weigh, not as a bill every');
+    lines.push('  request is known to carry — and not as a saving either:');
+    for (const c of r.conditions) lines.push(...bullet(c));
+    lines.push('  What the vendor is on record with, and when it was read:');
+    for (const src of r.sources) lines.push(...bullet(src));
+    if (d.sharedMeasurements > 0)
+      lines.push(...sharedMeasurementLines(d, skippedNames, SIZE_UNKNOWN));
     return lines;
   }
 
   if (d.mode === 'setting-unrecognized') {
-    lines.push(`  ${d.setting?.variable} is set to "${d.setting?.value}" on this machine, which is not`);
+    lines.push(
+      `  ${d.setting?.variable} is set to "${d.setting?.value}" on this machine, which is not`,
+    );
     lines.push('  one of the values Claude Code documents (unset, true, false, auto, auto:N).');
     lines.push('  Whether these tokens are deferred cannot be said from it.');
     lines.push(...postureSourceLines(d));
-    if (d.sharedMeasurements > 0) lines.push(...sharedMeasurementLines(d, skippedNames, SIZE_UNKNOWN));
+    if (d.sharedMeasurements > 0)
+      lines.push(...sharedMeasurementLines(d, skippedNames, SIZE_UNKNOWN));
     return lines;
   }
 
@@ -856,7 +1209,8 @@ function deferralLines(d: DeferralVerdict, skippedNames: number): string[] {
       lines.push('  Whether these tokens are deferred cannot be said from them.');
     }
     lines.push(...postureSourceLines(d));
-    if (d.sharedMeasurements > 0) lines.push(...sharedMeasurementLines(d, skippedNames, SIZE_UNKNOWN));
+    if (d.sharedMeasurements > 0)
+      lines.push(...sharedMeasurementLines(d, skippedNames, SIZE_UNKNOWN));
     return lines;
   }
 
@@ -865,17 +1219,21 @@ function deferralLines(d: DeferralVerdict, skippedNames: number): string[] {
     lines.push(`  because ${settingPhrase(d)}. Every request carries these`);
     lines.push('  tokens before you type anything.');
     lines.push(...postureSourceLines(d));
-    if (d.sharedMeasurements > 0) lines.push(...sharedMeasurementLines(d, skippedNames, SIZE_UNKNOWN));
+    if (d.sharedMeasurements > 0)
+      lines.push(...sharedMeasurementLines(d, skippedNames, SIZE_UNKNOWN));
     return lines;
   }
 
   if (d.mode === 'defers-all') {
-    lines.push(`  ${d.client} defers every MCP tool definition (${d.mechanism}), with no threshold —`);
+    lines.push(
+      `  ${d.client} defers every MCP tool definition (${d.mechanism}), with no threshold —`,
+    );
     lines.push(`  ${settingPhrase(d)}. These tokens are NOT loaded`);
     lines.push('  up front at any size; they load when the model reaches for a tool. Size');
     lines.push('  decides nothing here, so none of the arithmetic above changes the answer.');
     lines.push(...postureSourceLines(d));
-    if (d.sharedMeasurements > 0) lines.push(...sharedMeasurementLines(d, skippedNames, SIZE_UNKNOWN));
+    if (d.sharedMeasurements > 0)
+      lines.push(...sharedMeasurementLines(d, skippedNames, SIZE_UNKNOWN));
     lines.push('  The full number is paid where deferral does not apply:');
     for (const e of d.exceptions) lines.push(`    ${e}`);
     return lines;
@@ -885,7 +1243,10 @@ function deferralLines(d: DeferralVerdict, skippedNames: number): string[] {
   const t = d.thresholdTokens ?? 0;
   lines.push(`  ${d.client} defers tool definitions above a threshold here (${d.mechanism}):`);
   lines.push(`  ${settingPhrase(d)}, so deferral activates once the`);
-  lines.push(`  definitions reach ${n(t)} tokens — ${pct(d.thresholdShare ?? 0)} of the context window.`);
+  lines.push(
+    `  definitions reach ${n(t)} tokens — ${pct(d.thresholdShare ?? 0)} of the context window.`,
+  );
+  lines.push(...thresholdAssumptionLines(d));
   lines.push(...postureSourceLines(d));
 
   const c = d.clientTokens;
@@ -905,7 +1266,9 @@ function deferralLines(d: DeferralVerdict, skippedNames: number): string[] {
     lines.push('  threshold is counted on.');
   } else {
     lines.push(`  This stack is ${total} tokens on the wire. The threshold is counted in what`);
-    lines.push(`  the client sends to the API, which is a different number: across ${d.ratio!.servers}`);
+    lines.push(
+      `  the client sends to the API, which is a different number: across ${d.ratio!.servers}`,
+    );
     lines.push(
       `  servers in ${d.ratio!.source} the two differ by ${ratioBand(d)}, putting this stack`,
     );
@@ -916,12 +1279,16 @@ function deferralLines(d: DeferralVerdict, skippedNames: number): string[] {
   }
 
   if (d.crosses === true) {
-    lines.push(`  That is at or above the threshold — over by ${n(d.distanceTokens!.low)} at the low end —`);
+    lines.push(
+      `  That is at or above the threshold — over by ${n(d.distanceTokens!.low)} at the low end —`,
+    );
     lines.push('  so these tokens are NOT loaded up front. The full number is still paid');
     lines.push('  where deferral does not apply:');
     for (const e of d.exceptions) lines.push(`    ${e}`);
   } else if (d.crosses === false) {
-    lines.push(`  That is below the threshold — under by ${n(-d.distanceTokens!.high)} at the high end —`);
+    lines.push(
+      `  That is below the threshold — under by ${n(-d.distanceTokens!.high)} at the high end —`,
+    );
     lines.push('  so deferral does not activate and every request carries these tokens');
     lines.push('  before you type anything.');
   } else {
@@ -944,7 +1311,7 @@ function deferralLines(d: DeferralVerdict, skippedNames: number): string[] {
 /** "0.20×–1.92×", from whichever band the verdict was actually computed against. */
 function ratioBand(d: DeferralVerdict): string {
   const r = d.ratio ?? PUBLISHED_WIRE_TO_CLIENT_RATIO;
-  return `${r.low.toFixed(2)}×–${r.high.toFixed(2)}×`;
+  return `${r.low.toFixed(BAND_PRECISION)}×–${r.high.toFixed(BAND_PRECISION)}×`;
 }
 
 /** Human output. JSON output is the report object itself. */
@@ -955,13 +1322,53 @@ export function formatReport(report: AuditReport): string {
   );
 
   const showClaude = !!report.claudeDivergence;
+
+  // The managed MCP file with no server rows of its own still owns the session:
+  // deployed empty it disables MCP, unreadable it makes the session unsayable.
+  // Either way that is the first fact about claude-code on this machine.
+  if (report.managedMcp && report.managedMcp.state !== 'exclusive') {
+    const m = report.managedMcp;
+    lines.push('');
+    lines.push(`claude-code  ${m.path}`);
+    if (m.state === 'disabled') {
+      lines.push(
+        '  managed: deployed with an empty server map — MCP is disabled by policy. No MCP',
+        '  server loads in a claude-code session on this machine, whatever the configs below',
+        '  declare; they are measured as files.',
+      );
+    } else {
+      lines.push(
+        '  managed: this file exists and could not be read — which servers a claude-code',
+        '  session loads cannot be said. The configs below are measured as files, and no',
+        '  session-level claim is made for this client.',
+      );
+      if (m.error) lines.push(`  ${m.error}`);
+    }
+  }
+
   // Configs one session loads together share a verdict object; it answers for
   // all of them at once, so it is printed under the first one and not repeated.
   const verdictPrinted = new Set<DeferralVerdict>();
+  const sessionPrinted = new Set<NonNullable<AuditReport['sessions']>[number]>();
+  let policyPrinted = false;
 
   for (const cfg of report.configs) {
     lines.push('');
     lines.push(`${cfg.client}  ${cfg.source}`);
+    if (cfg.managed) {
+      lines.push(
+        '  managed-mcp.json — exclusive control: a claude-code session loads only the servers',
+        '  in this file (plus in-process servers the launching app registers, which no config',
+        '  file describes). Other claude-code configs here are measured and do not load.',
+      );
+    }
+    if (cfg.suppressedByManagedMcp) {
+      lines.push(
+        `  does not load: ${cfg.suppressedByManagedMcp} has exclusive control of`,
+        '  claude-code sessions. Measured all the same — the numbers below are facts about',
+        '  this file, not about any session.',
+      );
+    }
 
     const rows = cfg.servers.map((s) => ({
       name: s.name,
@@ -982,7 +1389,9 @@ export function formatReport(report: AuditReport): string {
 
     lines.push(line('server', 'tools', 'tokens', 'share', 'claude'));
     for (const r of rows) lines.push(line(r.name, r.tools, r.tokens, r.share, r.claude));
-    lines.push(`  ${'─'.repeat(w.name + w.tools + w.tokens + 14 + (showClaude ? w.claude + 2 : 0))}`);
+    lines.push(
+      `  ${'─'.repeat(w.name + w.tools + w.tokens + 14 + (showClaude ? w.claude + 2 : 0))}`,
+    );
     lines.push(line('total', String(cfg.toolCount), n(cfg.totalTokens), '', ''));
 
     lines.push('');
@@ -992,7 +1401,87 @@ export function formatReport(report: AuditReport): string {
       const skippedInScope = report.configs
         .filter((c) => c.deferral === cfg.deferral)
         .reduce((a, c) => a + c.skipped.length, 0);
-      for (const line of deferralLines(cfg.deferral, skippedInScope)) lines.push(line);
+      for (const deferralLine of deferralLines(cfg.deferral, skippedInScope))
+        lines.push(deferralLine);
+    }
+    {
+      const session = report.sessions?.find((s) =>
+        ONE_SESSION_PER_CLIENT.has(cfg.client)
+          ? s.client === cfg.client
+          : s.client === cfg.client && s.sources.length === 1 && s.sources[0] === cfg.source,
+      );
+      if (
+        session &&
+        !sessionPrinted.has(session) &&
+        (session.sources.length !== 1 || (session.deniedTokens ?? 0) > 0)
+      ) {
+        sessionPrinted.add(session);
+        const denied =
+          (session.deniedTokens ?? 0) > 0
+            ? ` (after ${n(session.deniedTokens!)} tokens removed by deniedMcpServers)`
+            : '';
+        const what =
+          session.sources.length === 0
+            ? 'no MCP servers'
+            : `${session.sources.length} config files together`;
+        lines.push('');
+        lines.push(
+          `  one ${cfg.client} session loads ${what}: ${n(session.totalTokens)} tokens — ` +
+            `${pct(session.contextShare)} of a ${n(report.contextWindow)}-token context window${denied}.`,
+        );
+        lines.push('  That session figure is what --budget gates; per-file totals stay above.');
+      }
+    }
+    if (cfg.client === 'claude-code' && report.mcpPolicy && !policyPrinted) {
+      policyPrinted = true;
+      const p = report.mcpPolicy;
+      if (p.denied.length) {
+        lines.push('');
+        lines.push(
+          '  blocked by deniedMcpServers — a denied server does not load, whatever else is',
+          "  set, so these are left out of the session claims above (never out of a file's",
+          '  own total):',
+        );
+        for (const d of p.denied) {
+          const tok = d.tokens != null ? ` — ${n(d.tokens)} tokens` : '';
+          lines.push(`    ${d.server}${tok} — matched ${d.entry} (${d.source})`);
+        }
+      }
+      if (p.denyUnevaluated.length) {
+        lines.push('');
+        lines.push('  deny entries set but not evaluated here — a match would only remove more:');
+        for (const u of p.denyUnevaluated) lines.push(`    ${u.entry} (${u.source}) — ${u.reason}`);
+      }
+      if (p.allow) {
+        lines.push('');
+        lines.push(`  an MCP allowlist is set in ${p.allow.sources.join(', ')}.`);
+        if (p.allow.managedOnly) {
+          lines.push(
+            `    allowManagedMcpServersOnly is true in ${p.allow.managedOnly.source}, so only`,
+            '    managed-tier entries counted below.',
+          );
+        }
+        const fails = p.allow.rows.filter((r) => r.verdict === 'fails').map((r) => r.server);
+        const unev = p.allow.rows.filter((r) => r.verdict === 'unevaluated').map((r) => r.server);
+        const hit = p.allow.rows.length - fails.length - unev.length;
+        lines.push(
+          `    ${hit} of ${p.allow.rows.length} session server(s) match an entry read here.`,
+        );
+        if (fails.length) {
+          lines.push(
+            `    matched by nothing read here: ${fails.join(', ')} — reported, not removed. An`,
+            '    entry in a tier this audit does not read (server-managed settings, an MDM',
+            '    profile, a registry key) can only broaden an allowlist, so this is a condition',
+            '    to check, never a subtraction.',
+          );
+        }
+        if (unev.length) {
+          lines.push(`    not evaluated: ${unev.join(', ')} — an entry below decides them.`);
+        }
+        for (const u of p.allow.unevaluated) {
+          lines.push(`      entry not evaluated: ${u.entry} (${u.source}) — ${u.reason}`);
+        }
+      }
     }
 
     if (cfg.heaviestTools.length) {
@@ -1016,7 +1505,8 @@ export function formatReport(report: AuditReport): string {
 
     if (cfg.captureVerdicts) {
       const behind = cfg.captureVerdicts.filter(
-        (v): v is { name: string; verdict: Extract<CaptureVerdict, { kind: 'behind' }> } => v.verdict.kind === 'behind',
+        (v): v is { name: string; verdict: Extract<CaptureVerdict, { kind: 'behind' }> } =>
+          v.verdict.kind === 'behind',
       );
       const current = cfg.captureVerdicts.filter((v) => v.verdict.kind === 'current');
       const unknown = cfg.captureVerdicts.length - behind.length - current.length;
@@ -1042,7 +1532,7 @@ export function formatReport(report: AuditReport): string {
           const alias = name === v.server ? name : `${name} (published as ${v.server})`;
           lines.push(
             `    ${alias} — you have the capture published ${v.yourDate} at ${n(v.yourTokens)} tokens; ` +
-              `the current one is ${n(v.currentTokens)} (${v.deltaTokens >= 0 ? '+' : '−'}${n(Math.abs(v.deltaTokens))}, ${v.currentDate})`,
+              `the current one is ${n(v.currentTokens)} (${signed(v.deltaTokens)}, ${v.currentDate})`,
           );
         }
         lines.push(
@@ -1088,7 +1578,9 @@ export function formatReport(report: AuditReport): string {
           );
         }
         if (sg.outOfDistribution.length > shown.length) {
-          lines.push(`    …and ${sg.outOfDistribution.length - shown.length} more above the threshold.`);
+          lines.push(
+            `    …and ${sg.outOfDistribution.length - shown.length} more above the threshold.`,
+          );
         }
         const within = sg.checkedTools - sg.outOfDistribution.length;
         lines.push(
@@ -1127,7 +1619,9 @@ export function formatReport(report: AuditReport): string {
     lines.push('');
     if (!b.over) {
       const headroom = b.limit - b.worstTotal;
-      lines.push(`budget ok: ${n(b.worstTotal)} ≤ ${n(b.limit)} — ${n(headroom)} to spare`);
+      lines.push(
+        `budget ok: ${n(b.worstTotal)} ≤ ${n(b.limit)} — ${n(headroom)} to spare (costliest session: ${b.worstSource})`,
+      );
     } else if (b.unestablished && b.worstTotal <= b.limit) {
       // Under the line on what was measured, but not everything was: say which
       // way the number is wrong rather than passing on it.
@@ -1160,9 +1654,7 @@ export function formatReport(report: AuditReport): string {
           lines.push(`  what any one of these servers costs.`);
         } else if (fit.feasible) {
           const share = b.limit > 0 ? ` (${pct(fit.keptTokens / b.limit)} of budget)` : '';
-          lines.push(
-            `  keeps ${fit.keptCount} server(s) at ${n(fit.keptTokens)} tokens${share}`,
-          );
+          lines.push(`  keeps ${fit.keptCount} server(s) at ${n(fit.keptTokens)} tokens${share}`);
         } else {
           lines.push(
             `  even removing every measured server leaves ${n(fit.keptTokens)} — the limit is below this config's floor`,
@@ -1193,18 +1685,10 @@ export function formatReport(report: AuditReport): string {
     'These are wire tokens — what the server puts on the wire, counted with o200k_base. What your model is billed',
   );
   lines.push(
-    `differs per provider: measured ratios run ${PUBLISHED_WIRE_TO_CLIENT_RATIO.low.toFixed(2)}×–` +
-      `${PUBLISHED_WIRE_TO_CLIENT_RATIO.high.toFixed(2)}× on Anthropic requests. See docs/METHODOLOGY.md §claude-divergence.`,
+    `differs per provider: measured ratios run ${PUBLISHED_WIRE_TO_CLIENT_RATIO.low.toFixed(BAND_PRECISION)}×–` +
+      `${PUBLISHED_WIRE_TO_CLIENT_RATIO.high.toFixed(BAND_PRECISION)}× on Anthropic requests. See docs/METHODOLOGY.md §claude-divergence.`,
   );
   return lines.map((l) => l.replace(/\s+$/, '')).join('\n');
-}
-
-/** Top-level tool list across every config — used by nothing yet, handy for --json consumers. */
-export function allHeaviestTools(report: AuditReport, limit = 10): HeaviestTool[] {
-  return report.configs
-    .flatMap((c) => c.heaviestTools)
-    .sort((a, b) => b.tokens - a.tokens)
-    .slice(0, limit);
 }
 
 export type { ToolMeasurement };

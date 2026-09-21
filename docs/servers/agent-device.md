@@ -1,69 +1,68 @@
 # agent-device — context cost
 
-**53,669 tokens** across 57 tools — *very heavy* (≥ 30K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**48,909 tokens** across 57 tools — *very heavy* (≥ 30K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
+
+An Anthropic request carries 33,319 of those tokens as tool definitions. What Claude makes of them is not published for this server: its Claude count is missing, or was taken against a capture this measurement has since replaced.
 
 | | |
 |---|---|
-| server (self-reported) | agent-device v0.20.10 |
+| server (self-reported) | agent-device v0.21.4 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y agent-device mcp` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | none |
-| canonical SHA-256 | `61a100d3f94ba6e81eedcbd151cfff7ce5e6acd36906571c7035e0b09a681dca` |
+| canonical SHA-256 | `3405333902a4a368c930626f35a1c4cd947ab9cdc0e88e81963165028de16c55` |
 | category | community |
 | source | https://github.com/callstack/agent-device |
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
-|---|---:|---:|---:|---:|
-| fill | 4,461 | 8.3% | 43 | 968 |
-| click | 2,718 | 5.1% | 51 | 1,016 |
-| press | 2,670 | 5.0% | 30 | 989 |
-| longpress | 2,485 | 4.6% | 34 | 880 |
-| hover | 2,478 | 4.6% | 56 | 861 |
-| find | 1,566 | 2.9% | 12 | 725 |
-| back | 1,213 | 2.3% | 28 | 681 |
-| open | 1,102 | 2.1% | 77 | 1,016 |
-| record | 998 | 1.9% | 39 | 637 |
-| gesture | 980 | 1.8% | 35 | 936 |
-| replay | 892 | 1.7% | 26 | 747 |
-| test | 881 | 1.6% | 11 | 722 |
-| doctor | 880 | 1.6% | 71 | 596 |
-| batch | 868 | 1.6% | 7 | 851 |
-| get | 817 | 1.5% | 30 | 778 |
-| snapshot | 813 | 1.5% | 30 | 774 |
-| metro | 812 | 1.5% | 64 | 739 |
-| keyboard | 806 | 1.5% | 58 | 584 |
-| diff | 800 | 1.5% | 24 | 619 |
-| wait | 788 | 1.5% | 41 | 659 |
-| scroll | 776 | 1.4% | 17 | 750 |
-| trace | 776 | 1.4% | 34 | 592 |
-| tv-remote | 773 | 1.4% | 48 | 643 |
-| perf | 772 | 1.4% | 63 | 700 |
-| is | 754 | 1.4% | 32 | 713 |
-| appstate | 750 | 1.4% | 4 | 551 |
-| shutdown | 749 | 1.4% | 7 | 551 |
-| push | 735 | 1.4% | 10 | 602 |
-| swipe | 733 | 1.4% | 8 | 715 |
-| boot | 732 | 1.4% | 31 | 569 |
+| tool | tokens | share | description | input schema | output schema |
+|---|---:|---:|---:|---:|---:|
+| fill | 4,848 | 9.9% | 68 | 840 | 3,929 |
+| click | 2,844 | 5.8% | 67 | 881 | 1,885 |
+| press | 2,796 | 5.7% | 46 | 854 | 1,885 |
+| longpress | 2,612 | 5.3% | 50 | 745 | 1,805 |
+| hover | 2,605 | 5.3% | 72 | 726 | 1,796 |
+| scroll | 1,535 | 3.1% | 125 | 655 | 744 |
+| back | 1,208 | 2.5% | 44 | 546 | 607 |
+| open | 1,029 | 2.1% | 93 | 927 | 0 |
+| record | 994 | 2.0% | 46 | 502 | 435 |
+| find | 993 | 2.0% | 19 | 590 | 373 |
+| gesture | 852 | 1.7% | 42 | 801 | 0 |
+| replay | 773 | 1.6% | 42 | 612 | 107 |
+| test | 753 | 1.5% | 19 | 587 | 136 |
+| doctor | 752 | 1.5% | 78 | 461 | 202 |
+| batch | 746 | 1.5% | 15 | 722 | 0 |
+| snapshot | 694 | 1.4% | 46 | 639 | 0 |
+| get | 689 | 1.4% | 37 | 643 | 0 |
+| wait | 687 | 1.4% | 64 | 535 | 77 |
+| keyboard | 678 | 1.4% | 65 | 449 | 153 |
+| diff | 672 | 1.4% | 31 | 484 | 146 |
+| metro | 666 | 1.4% | 71 | 586 | 0 |
+| is | 657 | 1.3% | 67 | 581 | 0 |
+| trace | 648 | 1.3% | 41 | 457 | 139 |
+| perf | 647 | 1.3% | 70 | 568 | 0 |
+| tv-remote | 645 | 1.3% | 55 | 508 | 69 |
+| appstate | 621 | 1.3% | 11 | 416 | 182 |
+| shutdown | 621 | 1.3% | 14 | 416 | 180 |
+| screenshot | 617 | 1.3% | 37 | 570 | 0 |
+| push | 607 | 1.2% | 17 | 467 | 112 |
+| swipe | 605 | 1.2% | 15 | 580 | 0 |
 
-*27 smaller tools omitted (17,089 tokens combined) — all of them are in the [raw capture](https://github.com/athakur3/mcp-context-cost/blob/main/results/agent-device/measurement.json).*
+*27 smaller tools omitted (13,813 tokens combined) — all of them are in the [raw capture](https://github.com/athakur3/mcp-context-cost/blob/main/results/agent-device/measurement.json).*
 
 Each tool is tokenized on its own, so the parts do not sum exactly to the whole: the array adds its own brackets and commas, and the tokenizer merges tokens across object boundaries. The badge number is always the count of the whole array, never a sum of parts.
 
-## What this costs on Claude
+## Over time
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+| date | tokens | tools | release | measured in | change |
+|---|---:|---:|---|---|---:|
+| 2026-09-04 | 53,669 | 57 | 0.20.10 | docker | — |
+| 2026-09-16 | 48,909 | 57 | 0.21.4 | docker | −4,760 |
 
-| | tokens | |
-|---|---:|---|
-| o200k, full capture | 53,669 | the badge number — every byte `tools/list` returned |
-| o200k, Anthropic fields only | 40,105 | 25.3% of the capture is MCP-only metadata |
-| **Claude, same fields** | **75,686** | 1.41× the badge number |
-
-An Anthropic tool definition carries `name`, `description`, and `input_schema` and nothing else, so `title`, `annotations`, `outputSchema`, `execution`, and `icons` are dropped before the request — that is the second row. The third row is the same tools counted by Anthropic, which is larger than the second because Anthropic's tokenizer is denser on this content than o200k_base *and* the API adds its own framing (at most 328 tokens of it fixed, measured against a single minimal tool). The two effects run in opposite directions, which is why the Claude number is not a fixed multiple of the badge.
+Full series: [results/history.csv](https://github.com/athakur3/mcp-context-cost/blob/main/results/history.csv).
 
 ## Re-derive it
 

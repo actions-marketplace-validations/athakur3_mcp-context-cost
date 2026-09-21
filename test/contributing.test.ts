@@ -17,10 +17,17 @@ import type { Measurement } from '../src/core/types.js';
  * field is added; the workflows drift when a job is renamed; the count guard
  * (`test/page-numbers.test.ts`) does not scan this file at all.
  *
+ * There is a second rule, learned the harder way: this page must not restate
+ * another *page*. Where it did — the laptop rule, the taxonomy's
+ * wording, an entry's own timeout comment, the pull-request template's copy of
+ * the whole procedure — a test held the two copies to each other, which is not
+ * a fix for a duplicated claim but maintenance of one. Those now link instead,
+ * and what is checked is that the copy has not come back.
+ *
  * So every expectation here is derived from the thing the sentence describes —
  * `FIELDS` through `knownFields` and the validator's own messages, the
  * workflow ymls' `run:` lines, `pr-check.ts`'s source and exit policy,
- * `resweep.yml`'s cron and shard default, `ROADMAP.md`'s own wording — rather
+ * `resweep.yml`'s cron and shard default — rather
  * than restated as literals a second time. A literal here would be the same
  * hand-written claim in two places, which is the failure the page exists to
  * avoid.
@@ -41,7 +48,8 @@ function section(heading: string): string {
 /** Prose wraps; a sentence is its words, not its layout. */
 const flat = (text: string) => text.replace(/\s+/g, ' ');
 
-const backticked = (text: string) => [...text.matchAll(/`([A-Za-z][A-Za-z0-9-]*)`/g)].map((m) => m[1]);
+const backticked = (text: string) =>
+  [...text.matchAll(/`([A-Za-z][A-Za-z0-9-]*)`/g)].map((m) => m[1]);
 
 /** A complete, valid entry — the shape servers-schema.test.ts mutates. */
 const base = (): ServerEntry => ({
@@ -111,7 +119,7 @@ describe('what an entry is', () => {
     // committed entry happens to use — so removing the last entry carrying
     // `dockerImage` cannot fail this for a reason unrelated to the page.
     const named = new Set(backticked(text).filter((id) => (knownFields as string[]).includes(id)));
-    expect([...named].sort()).toEqual([...knownFields].sort());
+    expect([...named].toSorted()).toEqual(knownFields.toSorted());
   });
 
   it('marks required and optional the way the validator does', () => {
@@ -121,12 +129,16 @@ describe('what an entry is', () => {
     expect(required.length).toBeGreaterThan(0);
     for (const field of knownFields) {
       const need = required.includes(field) ? 'required' : 'optional';
-      expect(text, `${field} is ${need}`).toMatch(new RegExp(`^\\| \`${field}\` \\| ${need} \\|`, 'm'));
+      expect(text, `${field} is ${need}`).toMatch(
+        new RegExp(`^\\| \`${field}\` \\| ${need} \\|`, 'm'),
+      );
     }
   });
 
   it('lists the category values the validator accepts', () => {
-    const bad = validateEntry({ ...base(), category: 'not-a-category' }, 0).find((p) => p.field === 'category')!;
+    const bad = validateEntry({ ...base(), category: 'not-a-category' }, 0).find(
+      (p) => p.field === 'category',
+    )!;
     const categories = /must be one of (.*?) —/.exec(bad.message)![1].split(', ');
     expect(categories.length).toBeGreaterThan(1);
     for (const c of categories) expect(text).toContain(`\`${c}\``);
@@ -135,11 +147,17 @@ describe('what an entry is', () => {
   it('states the metricSource forms servers.yaml actually uses', () => {
     const sources = servers.map((s) => s.metricSource);
     for (const form of ['(npm weekly)', '(PyPI weekly)']) {
-      expect(sources.some((s) => s.includes(form)), `servers.yaml uses ${form}`).toBe(true);
+      expect(
+        sources.some((s) => s?.includes(form)),
+        `servers.yaml uses ${form}`,
+      ).toBe(true);
       expect(text).toContain(form);
     }
-    for (const host of ['https://api.npmjs.org/downloads/point/last-week/', 'https://pypistats.org/packages/']) {
-      expect(sources.some((s) => s.startsWith(host))).toBe(true);
+    for (const host of [
+      'https://api.npmjs.org/downloads/point/last-week/',
+      'https://pypistats.org/packages/',
+    ]) {
+      expect(sources.some((s) => s?.startsWith(host))).toBe(true);
       expect(text).toContain(host);
     }
     expect(text).toContain('unverified');
@@ -161,8 +179,10 @@ describe('add an entry', () => {
       .split(/\n(?=\d+\. )/)
       .map((step) => /\*\*(.*?)\*\*/.exec(step)?.[1] ?? '');
     const at = steps.map((s) => instructions.findIndex((h) => h.includes(s)));
-    for (const [i, s] of steps.entries()) expect(at[i], `a step says to run ${s}`).toBeGreaterThanOrEqual(0);
-    for (let i = 1; i < at.length; i++) expect(at[i], `${steps[i]} after ${steps[i - 1]}`).toBeGreaterThan(at[i - 1]);
+    for (const [i, s] of steps.entries())
+      expect(at[i], `a step says to run ${s}`).toBeGreaterThanOrEqual(0);
+    for (let i = 1; i < at.length; i++)
+      expect(at[i], `${steps[i]} after ${steps[i - 1]}`).toBeGreaterThan(at[i - 1]);
   });
 
   it('describes the gate that makes the changelog bullet mandatory, and that gate still watches servers.yaml', () => {
@@ -170,11 +190,13 @@ describe('add an entry', () => {
     expect(gate).toContain('the changelog says nothing about work that ships');
     expect(gate).toMatch(/git\('diff', '--name-only'.*'servers\.yaml'/);
     expect(text).toContain('the changelog says nothing about work that ships');
-    // The gate's whole test of the section is an emptiness test; the document
-    // says so, and quotes the expression, so the two move together.
-    expect(gate).toContain("section.includes('\\n- ')");
-    expect(text).toContain("section.includes('\\n- ')");
-    expect(flat(text)).toContain('never reads what the bullet says');
+    // The gate fails only on an empty section and counts bullets otherwise; the
+    // document says so, and quotes the expression, so the two move together.
+    expect(gate).toContain('section.match(/\\n- /g)');
+    expect(text).toContain('section.match(/\\n- /g)');
+    // And the half it cannot do: it never claims a bullet covers a given commit.
+    expect(gate).toContain('It checks presence, not coverage');
+    expect(flat(text)).toContain('never reads what a bullet says');
   });
 
   it('says to append rather than insert, for the reason shard.ts states', () => {
@@ -195,7 +217,10 @@ describe('the launch command', () => {
     for (const name of ['agent-device', 'githits', 'emailmd']) {
       const e = entry(name);
       expect(e.command).not.toBe(`npx -y ${e.package}`);
-      expect(items.some((l) => l.startsWith(`- \`${e.command}\``)), `${name}'s command is a list item`).toBe(true);
+      expect(
+        items.some((l) => l.startsWith(`- \`${e.command}\``)),
+        `${name}'s command is a list item`,
+      ).toBe(true);
     }
   });
 
@@ -226,7 +251,7 @@ describe('the launch command', () => {
     const source = read('src/sweep/pr-check.ts');
     const printed = source.includes('listed, not launched here');
     expect(contributing.includes('listed, not launched')).toBe(printed);
-    if (printed) expect(contributing).toContain("its command is its own `docker run`");
+    if (printed) expect(contributing).toContain('its command is its own `docker run`');
   });
 });
 
@@ -246,17 +271,6 @@ describe('check it locally', () => {
     expect(text).toContain('never from');
   });
 
-  it('carries the laptop rule in the words ROADMAP.md states under Not planned', () => {
-    const roadmap = read('ROADMAP.md');
-    const notPlanned = roadmap.slice(roadmap.indexOf('\n## Not planned'));
-    const bullet = notPlanned
-      .split('\n')
-      .map((l) => l.trim())
-      .find((l) => l.startsWith('- ') && l.includes('developer machine'));
-    expect(bullet).toBeDefined();
-    expect(flat(text)).toContain(flat(bullet!.slice(2)));
-  });
-
   it('hands out no raw docker probe recipe', () => {
     // The harness caps every launch and force-removes every container it
     // created (run.ts `finally`); a hand-written `docker run` has neither.
@@ -268,7 +282,7 @@ describe('check it locally', () => {
     }
   });
 
-  it('gives run.ts\'s reason for the cleanup, in run.ts\'s words', () => {
+  it("gives run.ts's reason for the cleanup, in run.ts's words", () => {
     // The document once said every working MCP server never exits; the
     // record says some. The sentence quotes the comment above the `finally`.
     const run = read('src/sweep/run.ts');
@@ -295,12 +309,12 @@ describe('timeoutSeconds', () => {
     expect(text).toContain(`--default-timeout ${[...budgets][0]}`);
   });
 
-  it('points at the measured basis agent-device carries, and says the other values are not a precedent', () => {
-    const yaml = read('servers.yaml');
-    const basis = /# (Cold install measured at \d+s uncontended)/.exec(yaml);
-    expect(basis).not.toBeNull();
-    expect(text).toContain(basis![1]);
-    expect(text).toContain(`timeoutSeconds: ${entry('agent-device').timeoutSeconds}`);
+  it('sends the reader to the entry that carries a measured basis, and says the rest are not a precedent', () => {
+    // The basis lives in the entry's own comment; this page names the entry
+    // rather than copying the comment, so only the pointer is checked here.
+    expect(/# Cold install measured at \d+s uncontended/.test(read('servers.yaml'))).toBe(true);
+    expect(entry('agent-device').timeoutSeconds).toBeGreaterThan(0);
+    expect(text).toContain('`agent-device`');
     expect(text).toMatch(/not a precedent/);
   });
 
@@ -315,7 +329,9 @@ describe('env', () => {
   const text = section('env: names, never values');
 
   it('says names only, and the validator still rejects a value', () => {
-    expect(validateEntry({ ...base(), env: ['API_KEY=x'] }, 0).some((p) => p.field === 'env')).toBe(true);
+    expect(validateEntry({ ...base(), env: ['API_KEY=x'] }, 0).some((p) => p.field === 'env')).toBe(
+      true,
+    );
     expect(text).toContain('`NAME=dummy`');
     expect(read('src/sweep/docker.ts')).toContain("?? 'dummy'");
   });
@@ -338,13 +354,17 @@ describe('env', () => {
       expect(entry(name).envValues, `${name} has envValues`).toBeDefined();
       expect(text).toContain(`\`${name}\``);
     }
-    expect(validateEntry({ ...base(), envValues: { NOT_LISTED: 'x' } }, 0).some((p) => p.field === 'envValues')).toBe(true);
+    expect(
+      validateEntry({ ...base(), envValues: { NOT_LISTED: 'x' } }, 0).some(
+        (p) => p.field === 'envValues',
+      ),
+    ).toBe(true);
   });
 
-  it('calls auth-required a finding, as the taxonomy does', () => {
-    expect(read('docs/METHODOLOGY.md')).toContain('`auth-required` | won\'t start or list tools without real credentials');
+  it('calls auth-required a finding and sends the reader to the taxonomy that defines it', () => {
     expect(text).toContain('`auth-required`');
     expect(text).toMatch(/finding/);
+    expect(text).toContain('#failure-taxonomy--no-silent-drops');
   });
 });
 
@@ -361,7 +381,9 @@ describe('what happens on the pull request', () => {
   it('says every pull_request workflow holds a read-only token, and each one does', () => {
     expect(prWorkflows.length).toBeGreaterThan(0);
     for (const w of prWorkflows) {
-      const wf = parse(readFileSync(join(wfDir, w.file), 'utf8')) as { permissions?: Record<string, string> };
+      const wf = parse(readFileSync(join(wfDir, w.file), 'utf8')) as {
+        permissions?: Record<string, string>;
+      };
       expect(wf.permissions, `${w.file} declares permissions`).toEqual({ contents: 'read' });
     }
     expect(text).toContain('read-only token');
@@ -389,10 +411,11 @@ describe('what happens on the pull request', () => {
     expect(step).toBeDefined();
     if (!last.includes('release-readiness')) expect(flat(step)).not.toMatch(/runs last/);
     const after = ci.runs.slice(ci.runs.findIndex((l) => l.includes('release-readiness')) + 1);
-    if (after.some((l) => l.includes('badge'))) expect(flat(step)).toContain('badge golden tests run after it');
+    if (after.some((l) => l.includes('badge')))
+      expect(flat(step)).toContain('badge golden tests run after it');
   });
 
-  it('states the check\'s permissions and its run-line flags as the yml has them', () => {
+  it("states the check's permissions and its run-line flags as the yml has them", () => {
     for (const w of measuring) {
       const yml = readFileSync(join(wfDir, w.file), 'utf8');
       const wf = parse(yml) as { permissions: Record<string, string> };
@@ -415,6 +438,7 @@ describe('what happens on the pull request', () => {
       'startup-failure',
       'timeout',
       'not-applicable',
+      'protocol-mismatch',
     ];
     const line = (label: string) => {
       const m = new RegExp(`^- \\*\\*${label}\\*\\*:(.*(?:\\n(?![-\\n]).*)*)`, 'm').exec(text);
@@ -429,6 +453,34 @@ describe('what happens on the pull request', () => {
     }
   });
 
+  /**
+   * The list above is hand-written, so it can only check the statuses someone
+   * remembered to add to it. This one is derived from the type, and asks the
+   * other question: METHODOLOGY promises every swept server gets exactly one of
+   * these, which is a promise about a table a reader can find the status in.
+   *
+   * Block comments are stripped first. The union's own docblocks name
+   * `startup-failure`, `not-applicable` and `protocol-mismatch` while
+   * explaining them, so without the strip this would be reading the prose
+   * beside the members rather than the members — the failure this whole file
+   * exists to avoid.
+   *
+   * Deliberately one-directional, union to table and not back: the table
+   * carries an eighth row, `not-yet-run`, which is not a member of the union at
+   * all — `report.ts` and `server-pages.ts` synthesise it for an entry with no
+   * record yet. A symmetric version of this test is red on arrival.
+   */
+  it('gives every status the taxonomy can publish a row in METHODOLOGY', () => {
+    const union = /export type MeasurementStatus =([\s\S]*?);/.exec(
+      read('src/core/types.ts').replace(/\/\*[\s\S]*?\*\//g, ''),
+    )![1];
+    const members = [...union.matchAll(/'([a-z-]+)'/g)].map((m) => m[1]);
+    expect(members).toContain('measured');
+    expect(members.length).toBeGreaterThan(5);
+    const methodology = read('docs/METHODOLOGY.md');
+    for (const status of members) expect(methodology, status).toContain(`| \`${status}\` |`);
+  });
+
   it('says a first pull request waits for Approve and run, as pr-check.yml records', () => {
     for (const w of measuring) {
       expect(readFileSync(join(wfDir, w.file), 'utf8')).toContain('Approve and run');
@@ -438,7 +490,8 @@ describe('what happens on the pull request', () => {
 
   it('gives the reviewer a list, and does not repeat the provenance summary servers.yaml promises but lacks', () => {
     expect(text).toContain('What the reviewer checks');
-    for (const needle of ['`metricSource`', '`timeoutSeconds`', 'Provenance']) expect(text).toContain(needle);
+    for (const needle of ['`metricSource`', '`timeoutSeconds`', 'Provenance'])
+      expect(text).toContain(needle);
     expect(contributing).not.toMatch(/provenance summary/);
   });
 });
@@ -452,9 +505,23 @@ describe('after merge', () => {
     expect(text).toContain('`not-yet-run`');
   });
 
-  it('states the wait from the rotation\'s cron and shard default', () => {
+  it("states the wait from the rotation's cron and shard default", () => {
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const words = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+    const words = [
+      'zero',
+      'one',
+      'two',
+      'three',
+      'four',
+      'five',
+      'six',
+      'seven',
+      'eight',
+      'nine',
+      'ten',
+      'eleven',
+      'twelve',
+    ];
     const cron = /cron: '([^']*)'/.exec(resweep)![1].trim().split(/\s+/);
     expect(text).toContain(days[Number(cron[4])]);
     const shards = Number(/inputs\.shards \|\| '(\d+)'/.exec(resweep)![1]);
@@ -484,7 +551,6 @@ describe('what gets in', () => {
 
   it('calls an expected failure a finding, keeps deprecated entries, and states no metric floor', () => {
     expect(read('servers.yaml')).toContain('findings, not\n  # omissions');
-    expect(text).toMatch(/findings, not\s+omissions/);
     expect(servers.some((s) => s.deprecated)).toBe(true);
     expect(text).toContain('`deprecated`');
     expect(text).toMatch(/No metric floor/);
@@ -507,30 +573,45 @@ describe('the page states no live count', () => {
       .replace(/`[^`\n]*`/g, blank)
       .replace(/\]\([^)]*\)/g, blank)
       .replace(/https?:\/\/\S+/g, blank);
-    const hits = [...prose.matchAll(/\d[\d,]*\s+(?:[A-Za-z]+\s+){0,2}(?:servers?|entries|candidates?|files?|values?)\b/gi)];
+    const hits = [
+      ...prose.matchAll(
+        /\d[\d,]*\s+(?:[A-Za-z]+\s+){0,2}(?:servers?|entries|candidates?|files?|values?)\b/gi,
+      ),
+    ];
     expect(hits.map((h) => h[0])).toEqual([]);
   });
 });
 
 /**
- * The pull-request template is CONTRIBUTING.md's "Add an entry" order as a
- * checklist a contributor sees at the moment they open the PR. Two documents
- * stating one procedure is the drift this repository keeps finding, so the
- * template is held to the same records the guide is: the regen command, the
- * changelog bullet, the local check that writes nothing, and names-only env.
+ * The pull-request template is a checklist a contributor sees at the moment
+ * they open the PR. It used to restate CONTRIBUTING.md's "Add an entry" order
+ * step for step, with a test holding the two lists to the same commands — which
+ * is not a fix for two documents stating one procedure, only maintenance of it:
+ * the copy still had to be edited whenever a step changed, and the test only
+ * decided whether that had been remembered. The steps now live once, in the
+ * guide, and the template points at it. What is checked here is that the
+ * pointer is there and that the template states no procedure of its own.
  */
 describe('the pull-request template', () => {
   const template = readFileSync(join(repoRoot, '.github', 'pull_request_template.md'), 'utf8');
   const guide = readFileSync(join(repoRoot, 'CONTRIBUTING.md'), 'utf8');
 
-  it('exists, and points at the guide it summarises', () => {
+  it('points at the guide that holds the steps', () => {
     expect(template).toContain('CONTRIBUTING.md');
   });
 
-  it('names the same steps the guide does, and no step the guide does not', () => {
-    for (const step of ['npx tsx src/sweep/regen.ts', '## Unreleased', 'npm test', 'tools/release-readiness.ts', '--no-persist']) {
-      expect(template, step).toContain(step);
-      expect(guide, `${step} is in the guide the template summarises`).toContain(step);
+  it('restates no step of its own — the commands live in the guide', () => {
+    // Any of these in the template would be a second copy of a procedure, which
+    // is what moving the steps into the guide was for. The guide still has to
+    // carry them; that is checked against the code above, not against this file.
+    for (const command of [
+      'npx tsx src/sweep/regen.ts',
+      'tools/release-readiness.ts',
+      '--no-persist',
+      'npm test',
+    ]) {
+      expect(template, command).not.toContain(command);
+      expect(guide, `${command} is in the guide the template points at`).toContain(command);
     }
   });
 

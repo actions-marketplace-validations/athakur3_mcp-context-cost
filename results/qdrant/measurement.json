@@ -10,13 +10,17 @@
       "name": "qdrant-find",
       "tokens": 85,
       "descriptionTokens": 39,
-      "inputSchemaTokens": 30
+      "inputSchemaTokens": 30,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 0
     },
     {
       "name": "qdrant-store",
       "tokens": 101,
       "descriptionTokens": 15,
-      "inputSchemaTokens": 74
+      "inputSchemaTokens": 74,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 0
     }
   ],
   "canonicalSha256": "2bd5a36e7293bab6b8e62c28b7d210c5261f4b80331b176c1df6dc100a7e6fc4",
@@ -70,15 +74,16 @@
       }
     }
   ],
-  "measuredAt": "2026-09-04T13:03:30.611Z",
+  "measuredAt": "2026-09-16T08:30:47.176Z",
   "serverName": "mcp-server-qdrant",
-  "serverVersion": "1.29.1",
+  "serverVersion": "1.30.0",
   "launchCommand": "uvx mcp-server-qdrant",
   "envVarNames": [
     "QDRANT_URL",
     "COLLECTION_NAME"
   ],
   "serverInstructions": null,
+  "negotiatedProtocolVersion": "2025-06-18",
   "isolation": {
     "docker": true,
     "image": "ghcr.io/astral-sh/uv:python3.12-bookworm-slim",
@@ -86,5 +91,6 @@
     "note": "network enabled for package fetch; clean FS, no host credentials",
     "arch": "linux/amd64"
   },
-  "timeoutMs": 240000
+  "timeoutMs": 240000,
+  "requestedProtocolVersion": "2025-06-18"
 }

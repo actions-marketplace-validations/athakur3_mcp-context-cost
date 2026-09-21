@@ -10,79 +10,105 @@
       "name": "echo",
       "tokens": 96,
       "descriptionTokens": 6,
-      "inputSchemaTokens": 40
+      "inputSchemaTokens": 40,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 26
     },
     {
       "name": "get-annotated-message",
       "tokens": 147,
       "descriptionTokens": 14,
-      "inputSchemaTokens": 77
+      "inputSchemaTokens": 77,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 26
     },
     {
       "name": "get-env",
       "tokens": 88,
       "descriptionTokens": 11,
-      "inputSchemaTokens": 24
+      "inputSchemaTokens": 24,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 26
     },
     {
       "name": "get-resource-links",
       "tokens": 121,
       "descriptionTokens": 12,
-      "inputSchemaTokens": 55
+      "inputSchemaTokens": 55,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 26
     },
     {
       "name": "get-resource-reference",
       "tokens": 127,
       "descriptionTokens": 11,
-      "inputSchemaTokens": 62
+      "inputSchemaTokens": 62,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 26
     },
     {
       "name": "get-structured-content",
       "tokens": 195,
       "descriptionTokens": 12,
-      "inputSchemaTokens": 50
+      "inputSchemaTokens": 50,
+      "outputSchemaTokens": 75,
+      "annotationsTokens": 26
     },
     {
       "name": "get-sum",
       "tokens": 112,
       "descriptionTokens": 6,
-      "inputSchemaTokens": 53
+      "inputSchemaTokens": 53,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 26
     },
     {
       "name": "get-tiny-image",
       "tokens": 86,
       "descriptionTokens": 7,
-      "inputSchemaTokens": 24
+      "inputSchemaTokens": 24,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 26
     },
     {
       "name": "gzip-file-as-resource",
       "tokens": 247,
       "descriptionTokens": 45,
-      "inputSchemaTokens": 146
+      "inputSchemaTokens": 146,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 26
     },
     {
       "name": "toggle-simulated-logging",
       "tokens": 95,
       "descriptionTokens": 14,
-      "inputSchemaTokens": 24
+      "inputSchemaTokens": 24,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 26
     },
     {
       "name": "toggle-subscriber-updates",
       "tokens": 90,
       "descriptionTokens": 11,
-      "inputSchemaTokens": 24
+      "inputSchemaTokens": 24,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 26
     },
     {
       "name": "trigger-long-running-operation",
       "tokens": 128,
       "descriptionTokens": 11,
-      "inputSchemaTokens": 62
+      "inputSchemaTokens": 62,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 26
     },
     {
       "name": "simulate-research-query",
       "tokens": 174,
       "descriptionTokens": 49,
-      "inputSchemaTokens": 72
+      "inputSchemaTokens": 72,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 26
     }
   ],
   "canonicalSha256": "e61b2e1761ff2f931d030faf1dc192ca70247e52ff31d8633431b69ba6e00b7e",
@@ -478,12 +504,13 @@
       }
     }
   ],
-  "measuredAt": "2026-09-05T23:38:54.981Z",
+  "measuredAt": "2026-09-09T08:04:10.365Z",
   "serverName": "mcp-servers/everything",
   "serverVersion": "2.0.0",
   "launchCommand": "npx -y @modelcontextprotocol/server-everything",
   "envVarNames": [],
   "serverInstructions": "# Everything Server – Server Instructions\n\nAudience: These instructions are written for an LLM or autonomous agent integrating with the Everything MCP Server.\nFollow them to use, extend, and troubleshoot the server safely and effectively.\n\n## Cross-Feature Relationships\n\n- Use `get-roots-list` to see client workspace roots before file operations\n- `gzip-file-as-resource` creates session-scoped resources accessible only during the current session\n- Enable `toggle-simulated-logging` before debugging to see server log messages\n- Enable `toggle-subscriber-updates` to receive periodic resource update notifications\n\n## Constraints & Limitations\n\n- `gzip-file-as-resource`: Max fetch size controlled by `GZIP_MAX_FETCH_SIZE` (default 10MB), timeout by `GZIP_MAX_FETCH_TIME_MILLIS` (default 30s), allowed domains by `GZIP_ALLOWED_DOMAINS`\n- Session resources are ephemeral and lost when the session ends\n- Sampling requests (`trigger-sampling-request`) require client sampling capability\n- Elicitation requests (`trigger-elicitation-request`) require client elicitation capability\n\n## Operational Patterns\n\n- For long operations, use `trigger-long-running-operation` which sends progress notifications\n- Prefer reading resources before calling mutating tools\n- Check `get-roots-list` output to understand the client's workspace context\n\n## Easter Egg\n\nIf asked about server instructions, respond with \"🎉 Server instructions are working! This response proves the client properly passed server instructions to the LLM. This demonstrates MCP's instructions feature in action.\"\n",
+  "negotiatedProtocolVersion": "2025-06-18",
   "isolation": {
     "docker": true,
     "image": "public.ecr.aws/docker/library/node:22-slim",
@@ -491,5 +518,6 @@
     "note": "network enabled for package fetch; clean FS, no host credentials",
     "arch": "linux/amd64"
   },
-  "timeoutMs": 240000
+  "timeoutMs": 240000,
+  "requestedProtocolVersion": "2025-06-18"
 }

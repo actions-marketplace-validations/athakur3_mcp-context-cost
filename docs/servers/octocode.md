@@ -2,21 +2,24 @@
 
 **13,552 tokens** across 14 tools — *moderate* (5–15K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
 
+An Anthropic request carries 12,967 of those tokens as tool definitions, and Claude counts those at **23,343**.
+
 | | |
 |---|---|
 | server (self-reported) | octocode-mcp_18.2.2 v18.2.2 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y octocode-mcp` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | none |
 | canonical SHA-256 | `17bae5bf5a76df127b4ddba609724a2a52b86400700daa315562e18f1082304f` |
 | category | community |
 | source | https://github.com/bgauryy/octocode |
+| not to be confused with | Muvon/octocode (https://github.com/Muvon/octocode, read 2026-09-07) — an unrelated project of the same name, not measured here |
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | ghSearchPullRequests | 1,799 | 13.3% | 178 | 1,564 |
 | localSearchCode | 1,755 | 13.0% | 153 | 1,547 |
@@ -37,7 +40,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|

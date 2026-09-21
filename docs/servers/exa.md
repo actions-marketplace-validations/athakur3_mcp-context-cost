@@ -2,13 +2,15 @@
 
 **486 tokens** across 2 tools — *lean* (< 1K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
 
+An Anthropic request carries 414 of those tokens as tool definitions, and Claude counts those at **968**.
+
 | | |
 |---|---|
 | server (self-reported) | exa-search-server v3.4.1 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y exa-mcp-server` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · architecture not on record · network enabled for package fetch; clean FS, no host credent |
 | env vars supplied | EXA_API_KEY |
 | canonical SHA-256 | `8c3c954e5a791807875357bc783cc67385bd7bb53ee31b659e83015b36ed99a9` |
 | category | vendor-official |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | web_search_exa | 289 | 59.5% | 113 | 119 |
 | web_fetch_exa | 195 | 40.1% | 56 | 87 |
@@ -25,7 +27,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|

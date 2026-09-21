@@ -26,9 +26,10 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
-import { parse } from 'yaml';
 import { selectShard, shardIndexForDate } from '../src/sweep/shard.js';
 import type { Measurement } from '../src/core/types.js';
+import { loadServersDoc } from '../src/sweep/servers-schema.js';
+import { flagValue, knownFlagNames, unknownFlags, valuelessFlags } from '../src/flags.js';
 import {
   DIVERGENCE_METHOD,
   mappedTokens,
@@ -53,10 +54,14 @@ const PROBE_TOOL = {
 
 const root = process.cwd();
 
-function arg(name: string): string | undefined {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? process.argv[i + 1] : undefined;
+const SPEC = { value: ['only', 'shards', 'shard-index'], boolean: [] };
+const argv = process.argv.slice(2);
+const bad = [...unknownFlags(argv, SPEC), ...valuelessFlags(argv, SPEC)];
+if (bad.length) {
+  console.error(`unrecognised or valueless: ${bad.join(', ')}`);
+  process.exit(2);
 }
+const known = knownFlagNames(SPEC);
 
 /**
  * Bare, this writes the whole run: every measured server, exactly — never a
@@ -76,11 +81,16 @@ function arg(name: string): string | undefined {
  * its 2026-08-26 capture while the 15 rows above it refreshed twice. A bare
  * run replacing the whole file is what prevents that; a *selection* merges.
  */
-const only = arg('only')?.split(',');
-const shards = arg('shards') === undefined ? undefined : Number(arg('shards'));
-const shardIndexArg = arg('shard-index') === undefined ? undefined : Number(arg('shard-index'));
+const only = flagValue(argv, 'only', known)?.split(',');
+const shardsRaw = flagValue(argv, 'shards', known);
+const shards = shardsRaw === undefined ? undefined : Number(shardsRaw);
+const shardIndexRaw = flagValue(argv, 'shard-index', known);
+const shardIndexArg = shardIndexRaw === undefined ? undefined : Number(shardIndexRaw);
 /** Legacy positional: measure this many from the top, preserving the rest. */
-const topNArg = process.argv[2] !== undefined && !process.argv[2].startsWith('--') ? Number(process.argv[2]) : undefined;
+const topNArg =
+  process.argv[2] !== undefined && !process.argv[2].startsWith('--')
+    ? Number(process.argv[2])
+    : undefined;
 
 if (shards !== undefined && only) {
   // Same refusal as sweep-all and the cross-check runner, same reason: a slice
@@ -111,7 +121,7 @@ interface Candidate {
   m: Measurement;
 }
 
-const doc = parse(readFileSync(join(root, 'servers.yaml'), 'utf8')) as { servers: { name: string }[] };
+const doc = loadServersDoc(root) as { servers: { name: string }[] };
 const candidates: Candidate[] = [];
 for (const entry of doc.servers) {
   const p = join(root, 'results', entry.name, 'measurement.json');
@@ -143,7 +153,9 @@ if (shards !== undefined) {
     ),
   );
   selected = selected.filter((c) => slice.has(c.name));
-  console.log(`shard ${index + 1}/${shards}: ${selected.map((c) => c.name).join(', ') || '(none measured)'}`);
+  console.log(
+    `shard ${index + 1}/${shards}: ${selected.map((c) => c.name).join(', ') || '(none measured)'}`,
+  );
 }
 if (topNArg !== undefined) selected = selected.slice(0, topNArg);
 if (selected.length === 0) {
@@ -164,12 +176,14 @@ const count = async (tools?: unknown[]): Promise<number> => {
 
 const baselineTokens = await count();
 const probeDelta = (await count([PROBE_TOOL])) - baselineTokens;
-console.log(`baseline ${baselineTokens} tokens; probe delta ${probeDelta} (upper bound on fixed tool overhead)`);
+console.log(
+  `baseline ${baselineTokens} tokens; probe delta ${probeDelta} (upper bound on fixed tool overhead)`,
+);
 
 const outPath = join(root, 'results', 'divergence.json');
 const previous = existsSync(outPath) ? parseDivergence(readFileSync(outPath, 'utf8')) : null;
 // A touch-up edits the previous run in place; a bare run replaces it whole.
-const servers: Record<string, DivergenceRow> = touchUp ? { ...(previous?.servers ?? {}) } : {};
+const servers: Record<string, DivergenceRow> = touchUp ? { ...previous?.servers } : {};
 
 /**
  * A merge may not carry forward a row that has stopped describing its capture.
@@ -187,12 +201,16 @@ const servers: Record<string, DivergenceRow> = touchUp ? { ...(previous?.servers
  * makes the gap countable: what is owed is a bare run, and the line below says
  * how much of one.
  */
-const captureNow = new Map(candidates.map((c) => [c.name, c.m.canonicalSha256 as string | undefined]));
+const captureNow = new Map(
+  candidates.map((c) => [c.name, c.m.canonicalSha256 as string | undefined]),
+);
 const { kept, dropped: stale } = dropStaleRows(servers, (name) => captureNow.get(name));
 for (const name of Object.keys(servers)) delete servers[name];
 Object.assign(servers, kept);
 if (stale.length > 0) {
-  console.log(`dropped ${stale.length} row(s) whose capture has moved since they were measured: ${stale.join(', ')}`);
+  console.log(
+    `dropped ${stale.length} row(s) whose capture has moved since they were measured: ${stale.join(', ')}`,
+  );
 }
 
 for (const { name, m } of selected) {
@@ -224,7 +242,7 @@ const run: DivergenceRun = {
   measuredAt: new Date().toISOString().slice(0, 10),
   baselineTokens,
   probeDelta,
-  servers: Object.fromEntries(Object.entries(servers).sort(([a], [b]) => a.localeCompare(b))),
+  servers: Object.fromEntries(Object.entries(servers).toSorted(([a], [b]) => a.localeCompare(b))),
 };
 writeFileSync(outPath, JSON.stringify(run, null, 2) + '\n');
 
@@ -232,7 +250,9 @@ writeFileSync(outPath, JSON.stringify(run, null, 2) + '\n');
 // somebody notices later on a page that prints an em dash.
 const withRow = candidates.filter((c) => {
   const row = run.servers[c.name];
-  return row && !row.error && row.capturedSha256 === ((c.m.canonicalSha256 as string | undefined) ?? '');
+  return (
+    row && !row.error && row.capturedSha256 === ((c.m.canonicalSha256 as string | undefined) ?? '')
+  );
 }).length;
 console.log(
   `${withRow} of ${candidates.length} measured servers now carry a current Claude row` +

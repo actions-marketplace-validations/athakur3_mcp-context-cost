@@ -5,6 +5,7 @@
  * so the objects captured here ARE the wire representation.
  */
 import { spawn } from 'node:child_process';
+import { PROTOCOL_VERSION } from '../core/protocol.js';
 
 export interface WireCapture {
   serverInfo?: { name?: string; version?: string };
@@ -16,18 +17,69 @@ export interface WireCapture {
    * different fact from never having asked, so the two are never conflated.
    */
   instructions: string | null;
+  /**
+   * Whether the initialize result's `capabilities` object carried a `tools`
+   * key — the server's own statement that it has tools to list. `null` when
+   * the result carried no capabilities object at all. Kept so that an empty
+   * `tools/list` can be read: a server that declared no tools and listed none
+   * is coherent; one that declared tools and listed none is worth saying.
+   */
+  declaresTools: boolean | null;
   stderrTail: string;
 }
 
 interface Pending {
+  /**
+   * The method this id was sent for. Responses are correlated by id, so
+   * without carrying it here a JSON-RPC error could not name what it refused
+   * — see `rpcErrorMessage`.
+   */
+  method: string;
   resolve: (v: any) => void;
   reject: (e: Error) => void;
 }
 
-const PROTOCOL_VERSION = '2025-06-18';
-
 /** How an elided middle is marked, in every layout here. */
 const ELISION = ' […] ';
+
+/** Long enough to carry the versions a server names, short enough not to be the note. */
+const ERROR_DATA_CLIP = 300;
+
+/**
+ * A JSON-RPC error rendered as the sentence the classifier reads.
+ *
+ * The method is named because a `-32601` answering `initialize` and one
+ * answering `tools/list` are different facts — the first is about the protocol
+ * revision this harness pins, the second about the server's own tools — and
+ * this string was the only record of either.
+ *
+ * `data` is placed before the server's message rather than after it: `run.ts`
+ * clamps a record's notes to a fixed length by cutting the tail, and for
+ * `UNSUPPORTED_PROTOCOL_VERSION` the `data` is where the server names the
+ * revisions it does speak. That is the one part of the sentence that must
+ * survive a long message.
+ *
+ * Deliberately avoids the phrase `waiting for`, which anchors the timeout
+ * classifier one layer up.
+ */
+export function rpcErrorMessage(
+  method: string,
+  error: { code?: unknown; message?: unknown; data?: unknown },
+): string {
+  let data = '';
+  if (error.data !== undefined) {
+    try {
+      const json = JSON.stringify(error.data);
+      if (typeof json === 'string') {
+        data = ` [data: ${json.length > ERROR_DATA_CLIP ? `${json.slice(0, ERROR_DATA_CLIP)}…` : json}]`;
+      }
+    } catch {
+      // A payload that will not serialise (a cycle, a BigInt) is not worth
+      // losing the rest of the sentence over.
+    }
+  }
+  return `server error ${error.code} answering ${method}${data}: ${error.message}`;
+}
 
 /**
  * The part of a dead server's stderr worth keeping as evidence.
@@ -107,9 +159,11 @@ function bothEndsPlain(text: string, limit: number): string {
     const out: string[] = [];
     let used = 0;
     for (let i = fromEnd ? to : from; fromEnd ? i >= from : i <= to; i += fromEnd ? -1 : 1) {
-      const cost = lines[i].length + 1;
+      const line = lines[i]!; // the loop runs between indices taken from `lines`
+      const cost = line.length + 1;
       if (used + cost > cap) break;
-      fromEnd ? out.unshift(lines[i]) : out.push(lines[i]);
+      if (fromEnd) out.unshift(line);
+      else out.push(line);
       used += cost;
     }
     return { out, used };
@@ -124,7 +178,7 @@ function bothEndsPlain(text: string, limit: number): string {
   // never fit — slack-mcp-server's `{"level":"fatal","message":"Authentication
   // required: ..."}` was dropped in full, and the record it left behind said a
   // child process exited. Truncated evidence beats none.
-  const headText = head.out.length > 0 ? head.out.join('\n') : lines[0].slice(0, headCap);
+  const headText = head.out.length > 0 ? head.out.join('\n') : (lines[0] ?? '').slice(0, headCap);
   const headUsed = head.out.length > 0 ? head.used : headText.length;
   const tailFrom = head.out.length > 0 ? head.out.length : 1;
 
@@ -148,21 +202,23 @@ function aroundRequired(text: string, limit: number, needle: string): string {
   // the anchor is sized: the budget is a published-record limit, and a layout
   // that keeps the evidence by overrunning it has only moved the problem.
   const reserve = 2 * ELISION.length + 4;
-  const anchor = windowAround(lines[k], needle, Math.max(needle.length, limit - reserve));
+  const anchor = windowAround(lines[k]!, needle, Math.max(needle.length, limit - reserve));
 
   let budget = limit - anchor.length - reserve;
   const head: string[] = [];
   for (let i = 0; i < k; i++) {
-    const cost = lines[i].length + 1;
+    const line = lines[i]!; // the loop runs inside lines
+    const cost = line.length + 1;
     if (cost > budget) break;
-    head.push(lines[i]);
+    head.push(line);
     budget -= cost;
   }
   const tail: string[] = [];
   for (let i = lines.length - 1; i > k; i--) {
-    const cost = lines[i].length + 1;
+    const line = lines[i]!; // the loop runs inside lines
+    const cost = line.length + 1;
     if (cost > budget) break;
-    tail.unshift(lines[i]);
+    tail.unshift(line);
     budget -= cost;
   }
 
@@ -209,7 +265,10 @@ export function clampNotes(text: string, limit: number, required?: string): stri
   if (at < 0) return plain;
   const room = Math.max(0, limit - ELISION.length);
   const width = Math.min(room, Math.max(needle.length, Math.floor(room / 2)));
-  const start = Math.max(0, Math.min(at - Math.floor((width - needle.length) / 2), text.length - width));
+  const start = Math.max(
+    0,
+    Math.min(at - Math.floor((width - needle.length) / 2), text.length - width),
+  );
   return text.slice(0, Math.max(0, room - width)) + ELISION + text.slice(start, start + width);
 }
 
@@ -233,6 +292,52 @@ function drop(
   return kept || text.trim();
 }
 
+/**
+ * A client posture: what it declares at `initialize`, and how it answers the
+ * requests that declaration invites. The two live in one object because they
+ * are one decision — a client that declares `roots` and then returns
+ * "method not found" to `roots/list` has told the server something untrue, and
+ * a server is entitled to shape its tool list around the answer.
+ *
+ * This exists because the default posture, `{}`, is not neutral. A server may
+ * gate tools on what the client can do: measured 2026-09-06, the reference
+ * `everything` server exposes 13 tools to a client declaring nothing and 15 to
+ * one declaring roots and elicitation. So the published number for such a
+ * server is a floor, and which posture the sweep runs with is a measurement
+ * decision rather than a detail.
+ *
+ * `sampling` is deliberately absent. Declaring it says this client can ask a
+ * model for a completion, and it cannot; there is no honest minimal answer to
+ * `sampling/createMessage`, unlike an empty root list or a declined
+ * elicitation, both of which are ordinary states a real client can be in.
+ */
+export interface ClientPosture {
+  /** Sent verbatim as `capabilities` in `initialize`. */
+  capabilities: Record<string, unknown>;
+  /** Answers to server-initiated requests, by method. Every declared capability needs one. */
+  answers: Record<string, unknown>;
+}
+
+/** What the sweep has always declared: nothing, and so nothing to answer. */
+export const MINIMAL_POSTURE: ClientPosture = { capabilities: {}, answers: {} };
+
+/**
+ * The two capabilities this harness can answer truthfully.
+ *
+ * `roots/list` returns an empty list: this client exposes no filesystem roots,
+ * which is a true statement about it rather than a refusal. `elicitation/create`
+ * declines: the protocol provides for a user declining to answer, and an
+ * unattended sweep has no user, so declining is the honest reply and not a
+ * failure to implement one.
+ */
+export const DECLARING_POSTURE: ClientPosture = {
+  capabilities: { roots: { listChanged: false }, elicitation: {} },
+  answers: {
+    'roots/list': { roots: [] },
+    'elicitation/create': { action: 'decline' },
+  },
+};
+
 export class McpStdioClient {
   private child;
   private buffer = '';
@@ -247,6 +352,11 @@ export class McpStdioClient {
     env: Record<string, string | undefined>,
     /** Phrase this entry's declared status depends on — see `evidenceTail`. */
     private keepEvidence?: string,
+    /**
+     * Answers to server-initiated requests, one per declared capability. Empty
+     * by default, which is correct only while `initialize` declares nothing.
+     */
+    private answers: Record<string, unknown> = {},
   ) {
     this.child = spawn(command, args, {
       env: { ...env },
@@ -298,14 +408,21 @@ export class McpStdioClient {
         // collide with ours, so 'method' presence is checked before id dispatch.
         if (msg.id !== undefined && msg.id !== null) {
           if (msg.method === 'ping') this.send({ jsonrpc: '2.0', id: msg.id, result: {} });
-          else this.send({ jsonrpc: '2.0', id: msg.id, error: { code: -32601, message: 'method not found' } });
+          else if (Object.hasOwn(this.answers, msg.method))
+            this.send({ jsonrpc: '2.0', id: msg.id, result: this.answers[msg.method] });
+          else
+            this.send({
+              jsonrpc: '2.0',
+              id: msg.id,
+              error: { code: -32601, message: 'method not found' },
+            });
         }
         continue;
       }
       if (msg && typeof msg.id === 'number' && this.pending.has(msg.id)) {
         const p = this.pending.get(msg.id)!;
         this.pending.delete(msg.id);
-        if (msg.error) p.reject(new Error(`server error ${msg.error.code}: ${msg.error.message}`));
+        if (msg.error) p.reject(new Error(rpcErrorMessage(p.method, msg.error)));
         else p.resolve(msg.result);
       }
     }
@@ -335,6 +452,7 @@ export class McpStdioClient {
         );
       }, timeoutMs);
       this.pending.set(id, {
+        method,
         resolve: (v) => {
           clearTimeout(timer);
           resolve(v);
@@ -349,7 +467,9 @@ export class McpStdioClient {
   }
 
   notify(method: string, params?: unknown) {
-    this.send(params === undefined ? { jsonrpc: '2.0', method } : { jsonrpc: '2.0', method, params });
+    this.send(
+      params === undefined ? { jsonrpc: '2.0', method } : { jsonrpc: '2.0', method, params },
+    );
   }
 
   get stderrTail(): string {
@@ -371,22 +491,35 @@ export class McpStdioClient {
  */
 export async function captureTools(
   spec: string | { command: string; argv: string[] },
-  opts: { timeoutMs?: number; env?: Record<string, string>; keepEvidence?: string } = {},
+  opts: {
+    timeoutMs?: number | undefined;
+    env?: Record<string, string> | undefined;
+    keepEvidence?: string | undefined;
+    /**
+     * What to declare at `initialize`, and how to answer what that invites.
+     * Defaults to declaring nothing, which is what every published measurement
+     * was taken with.
+     */
+    posture?: ClientPosture | undefined;
+  } = {},
 ): Promise<WireCapture> {
   const timeoutMs = opts.timeoutMs ?? 60_000;
-  const [cmd, ...args] = typeof spec === 'string' ? splitCommand(spec) : [spec.command, ...spec.argv];
+  const posture = opts.posture ?? MINIMAL_POSTURE;
+  const [cmd = '', ...args] =
+    typeof spec === 'string' ? splitCommand(spec) : [spec.command, ...spec.argv];
   const client = new McpStdioClient(
     cmd,
     args,
     { PATH: process.env.PATH, HOME: process.env.HOME, ...opts.env },
     opts.keepEvidence,
+    posture.answers,
   );
   try {
     const init = await client.request(
       'initialize',
       {
         protocolVersion: PROTOCOL_VERSION,
-        capabilities: {},
+        capabilities: posture.capabilities,
         clientInfo: { name: 'mcp-context-cost', version: '0.1.0' },
       },
       timeoutMs,
@@ -398,12 +531,17 @@ export async function captureTools(
     let cursor: string | undefined;
     let pages = 0;
     do {
-      if (++pages > 100) throw new Error('tools/list pagination exceeded 100 pages — cursor loop suspected');
+      if (++pages > 100)
+        throw new Error('tools/list pagination exceeded 100 pages — cursor loop suspected');
       const res = await client.request('tools/list', cursor ? { cursor } : {}, timeoutMs);
       if (Array.isArray(res?.tools)) tools.push(...res.tools);
-      cursor = typeof res?.nextCursor === 'string' && res.nextCursor.length > 0 ? res.nextCursor : undefined;
+      cursor =
+        typeof res?.nextCursor === 'string' && res.nextCursor.length > 0
+          ? res.nextCursor
+          : undefined;
       if (cursor) {
-        if (seenCursors.has(cursor)) throw new Error('tools/list returned a repeated cursor — pagination loop');
+        if (seenCursors.has(cursor))
+          throw new Error('tools/list returned a repeated cursor — pagination loop');
         seenCursors.add(cursor);
       }
     } while (cursor);
@@ -413,6 +551,10 @@ export async function captureTools(
       protocolVersion: init?.protocolVersion,
       tools,
       instructions: typeof init?.instructions === 'string' ? init.instructions : null,
+      declaresTools:
+        init && typeof init.capabilities === 'object' && init.capabilities !== null
+          ? Object.hasOwn(init.capabilities, 'tools')
+          : null,
       stderrTail: client.stderrTail,
     };
   } finally {

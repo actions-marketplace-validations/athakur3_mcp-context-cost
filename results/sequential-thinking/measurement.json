@@ -10,7 +10,9 @@
       "name": "sequentialthinking",
       "tokens": 1001,
       "descriptionTokens": 565,
-      "inputSchemaTokens": 270
+      "inputSchemaTokens": 270,
+      "outputSchemaTokens": 95,
+      "annotationsTokens": 26
     }
   ],
   "canonicalSha256": "55e4c41338722ccc0672def6b5462f1dee664bf168cfd01172c4e96d344a1c2e",
@@ -127,12 +129,13 @@
       }
     }
   ],
-  "measuredAt": "2026-09-04T13:02:16.440Z",
+  "measuredAt": "2026-09-16T08:29:55.734Z",
   "serverName": "sequential-thinking-server",
   "serverVersion": "2026.8.31",
   "launchCommand": "npx -y @modelcontextprotocol/server-sequential-thinking",
   "envVarNames": [],
   "serverInstructions": null,
+  "negotiatedProtocolVersion": "2025-06-18",
   "isolation": {
     "docker": true,
     "image": "public.ecr.aws/docker/library/node:22-slim",
@@ -140,5 +143,6 @@
     "note": "network enabled for package fetch; clean FS, no host credentials",
     "arch": "linux/amd64"
   },
-  "timeoutMs": 240000
+  "timeoutMs": 240000,
+  "requestedProtocolVersion": "2025-06-18"
 }

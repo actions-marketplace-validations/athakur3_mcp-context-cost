@@ -13,6 +13,7 @@ import { measureTools } from '../src/core/canonical.js';
 import { buildReport, formatReport, serverKey } from '../src/audit/audit.js';
 import { loadToolVectors, writeCaptureIndex } from '../src/sweep/regressions.js';
 import type { ServerEntry } from '../src/sweep/report.js';
+import type { ConfiguredServer } from '../src/audit/config.js';
 
 /**
  * `--changed` tells a user their server got heavier, which is a claim about
@@ -88,26 +89,49 @@ describe('parseCaptureIndex', () => {
     const dirty = parseCaptureIndex(
       JSON.stringify({ ...index, captures: { ...index.captures, bad: { server: 'x' } } }),
     );
-    expect(Object.keys(dirty!.captures).sort()).toEqual([SHA_OLD, SHA_NEW].sort());
+    expect(Object.keys(dirty!.captures).toSorted()).toEqual([SHA_OLD, SHA_NEW].toSorted());
   });
 });
 
 describe('the audit report', () => {
-  const stdio = (name: string) => ({ name, transport: 'stdio' as const, command: 'node', argv: ['node', `${name}.js`] });
-  const cfg = (servers: ReturnType<typeof stdio>[]) =>
-    [{ client: 'claude-desktop', source: '/cfg.json', servers }] as Parameters<typeof buildReport>[0];
-  const measurement = measureTools([{ name: 't', description: 'A tool.', inputSchema: { type: 'object' } }], {
-    serverName: 'x',
-    launchCommand: 'node x.js',
+  const stdio = (name: string): ConfiguredServer => ({
+    name,
+    client: 'claude-code',
+    source: '/proj/.mcp.json',
+    transport: 'stdio' as const,
+    command: 'node',
+    argv: ['node', `${name}.js`],
     envVarNames: [],
   });
+  const cfg = (servers: ReturnType<typeof stdio>[]) =>
+    [{ client: 'claude-desktop', source: '/cfg.json', servers }] as Parameters<
+      typeof buildReport
+    >[0];
+  const measurement = measureTools(
+    [{ name: 't', description: 'A tool.', inputSchema: { type: 'object' } }],
+    {
+      serverName: 'x',
+      launchCommand: 'node x.js',
+      envVarNames: [],
+    },
+  );
   /** An index in which the measured stub is a published capture that has since moved. */
   const indexFor = (sha: string): CaptureIndex => ({
     method: CAPTURE_INDEX_METHOD,
     generatedAt: '2026-09-04',
     captures: {
-      [sha]: { server: 'upstream-name', date: '2026-08-19', totalTokens: measurement.totalTokens!, toolCount: 1 },
-      [SHA_NEW]: { server: 'upstream-name', date: '2026-09-03', totalTokens: measurement.totalTokens! + 500, toolCount: 2 },
+      [sha]: {
+        server: 'upstream-name',
+        date: '2026-08-19',
+        totalTokens: measurement.totalTokens!,
+        toolCount: 1,
+      },
+      [SHA_NEW]: {
+        server: 'upstream-name',
+        date: '2026-09-03',
+        totalTokens: measurement.totalTokens! + 500,
+        toolCount: 2,
+      },
     },
     current: { 'upstream-name': SHA_NEW },
   });
@@ -155,12 +179,32 @@ describe('a hash two servers share identifies neither', () => {
       const own = 'e'.repeat(64);
       // Two servers whose captures collide — one package under two slugs.
       for (const [name, entries] of [
-        ['alpha', [{ date: '2026-09-01', canonicalSha256: shared, totalTokens: 100, tools: [{ name: 't', tokens: 100 }] }]],
+        [
+          'alpha',
+          [
+            {
+              date: '2026-09-01',
+              canonicalSha256: shared,
+              totalTokens: 100,
+              tools: [{ name: 't', tokens: 100 }],
+            },
+          ],
+        ],
         [
           'beta',
           [
-            { date: '2026-09-02', canonicalSha256: shared, totalTokens: 100, tools: [{ name: 't', tokens: 100 }] },
-            { date: '2026-09-03', canonicalSha256: own, totalTokens: 150, tools: [{ name: 't', tokens: 150 }] },
+            {
+              date: '2026-09-02',
+              canonicalSha256: shared,
+              totalTokens: 100,
+              tools: [{ name: 't', tokens: 100 }],
+            },
+            {
+              date: '2026-09-03',
+              canonicalSha256: own,
+              totalTokens: 150,
+              tools: [{ name: 't', tokens: 150 }],
+            },
           ],
         ],
       ] as const) {
@@ -170,17 +214,17 @@ describe('a hash two servers share identifies neither', () => {
           JSON.stringify({ method: 'cost-regression/v1', server: name, entries }),
         );
       }
-      const index = writeCaptureIndex(
+      const written = writeCaptureIndex(
         [
           { name: 'alpha', command: 'npx -y alpha' },
           { name: 'beta', command: 'npx -y beta' },
         ],
         root,
       );
-      expect(index.captures[shared]).toBeUndefined();
-      expect(identify(shared, index).kind).toBe('unknown');
+      expect(written.captures[shared]).toBeUndefined();
+      expect(identify(shared, written).kind).toBe('unknown');
       // The unambiguous capture is unaffected.
-      expect(index.captures[own]?.server).toBe('beta');
+      expect(written.captures[own]?.server).toBe('beta');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -190,9 +234,13 @@ describe('a hash two servers share identifies neither', () => {
 describe('the committed index is the one the vectors derive', () => {
   it('names, for every entry, a capture its own tool-vectors file holds', () => {
     const repoRoot = join(import.meta.dirname, '..');
-    const committed = parseCaptureIndex(readFileSync(join(repoRoot, 'results', 'capture-index.json'), 'utf8'));
+    const committed = parseCaptureIndex(
+      readFileSync(join(repoRoot, 'results', 'capture-index.json'), 'utf8'),
+    );
     expect(committed).not.toBeNull();
-    const doc = parse(readFileSync(join(repoRoot, 'servers.yaml'), 'utf8')) as { servers: ServerEntry[] };
+    const doc = parse(readFileSync(join(repoRoot, 'servers.yaml'), 'utf8')) as {
+      servers: ServerEntry[];
+    };
     let checked = 0;
     for (const entry of doc.servers) {
       const vectors = loadToolVectors(entry.name, repoRoot);
@@ -206,7 +254,9 @@ describe('the committed index is the one the vectors derive', () => {
         checked++;
       }
       // The current pointer is the newest capture on record for that server.
-      expect(committed!.current[entry.name]).toBe(vectors.entries[vectors.entries.length - 1]!.canonicalSha256);
+      expect(committed!.current[entry.name]).toBe(
+        vectors.entries[vectors.entries.length - 1]!.canonicalSha256,
+      );
     }
     expect(checked).toBeGreaterThan(0);
     expect(Object.keys(committed!.captures)).toHaveLength(checked);

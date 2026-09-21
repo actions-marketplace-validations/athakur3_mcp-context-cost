@@ -1,6 +1,8 @@
 # browserbase — context cost
 
-**364 tokens** across 6 tools — *lean* (< 1K). Measured 2026-09-05 under [methodology v1.0](../METHODOLOGY.html).
+**364 tokens** across 6 tools — *lean* (< 1K). Measured 2026-09-09 under [methodology v1.0](../METHODOLOGY.html).
+
+An Anthropic request carries 310 of those tokens as tool definitions, and Claude counts those at **869**.
 
 | | |
 |---|---|
@@ -8,7 +10,7 @@
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y @browserbasehq/mcp` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | BROWSERBASE_API_KEY, BROWSERBASE_PROJECT_ID |
 | canonical SHA-256 | `1dc53461369d7cb64ea8151f33283db371951cf44289471f6156e35cd1ae28bb` |
 | category | vendor-official |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | act | 69 | 19.0% | 6 | 44 |
 | observe | 69 | 19.0% | 6 | 44 |
@@ -29,7 +31,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -47,6 +49,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-19 | 364 | 6 | not recorded | docker | no change |
 | 2026-09-04 | 364 | 6 | 3.0.0 | docker | no change |
 | 2026-09-05 | 364 | 6 | 3.0.0 | docker | no change |
+| 2026-09-09 | 364 | 6 | 3.0.0 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

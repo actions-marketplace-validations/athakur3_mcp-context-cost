@@ -74,7 +74,9 @@ describe('rotating re-sweep workflow', () => {
    * servers outright, but the unattended properties below have to hold for what
    * runs on a Wednesday with nobody watching.
    */
-  const scheduledShards = Number(/--shards \{0\}[\s\S]*?inputs\.shards \|\| '(\d+)'/.exec(select)![1]);
+  const scheduledShards = Number(
+    /--shards \{0\}[\s\S]*?inputs\.shards \|\| '(\d+)'/.exec(select)![1],
+  );
 
   it('measures a rotating slice rather than the whole set', () => {
     expect(invocation.length).toBe(1);
@@ -115,7 +117,10 @@ describe('rotating re-sweep workflow', () => {
       servers: { name: string; remote?: boolean }[];
     };
     const sweepable = doc.servers.filter((s) => !s.remote);
-    const sizes = Array.from({ length: shards }, (_, i) => selectShard(sweepable, shards, i).length);
+    const sizes = Array.from(
+      { length: shards },
+      (_, i) => selectShard(sweepable, shards, i).length,
+    );
     expect(Math.min(...sizes)).toBeGreaterThanOrEqual(MIN_REGRESSIONS);
   });
 
@@ -208,7 +213,9 @@ describe('the re-sweep refreshes the Claude column for the slice it just measure
     // The leaderboard's Claude cells are written by regen, and regen runs
     // inside the commit step after the rebase. A refresh afterwards would land
     // in the tree with nothing left to render it.
-    expect(resweep.indexOf('measure-divergence.ts')).toBeLessThan(resweep.indexOf('Commit refreshed measurements'));
+    expect(resweep.indexOf('measure-divergence.ts')).toBeLessThan(
+      resweep.indexOf('Commit refreshed measurements'),
+    );
   });
 
   it('stages the run as a measurement, not as a derived file', () => {
@@ -255,6 +262,66 @@ describe('every scheduled job that publishes data also publishes the front page'
 });
 
 /**
+ * The capability probe measures every server twice and publishes nothing, and
+ * both halves of that are load-bearing.
+ *
+ * It exists to answer whether a server's tool list depends on what the client
+ * declares at `initialize` — which means running each entry's launch command
+ * twice, under a posture no published measurement used. A result from the
+ * experimental half must never reach `results/`, or the leaderboard would
+ * quietly start describing a client this project does not ship. The probe
+ * passes `persist: false` on both captures, and the job holds no write token to
+ * commit with even if it did.
+ */
+describe('the capability probe answers a question without publishing one', () => {
+  const probe = readFileSync(join(wfDir, 'capability-probe.yml'), 'utf8');
+  const scriptRaw = readFileSync(
+    join(import.meta.dirname, '..', 'tools', 'capability-probe.ts'),
+    'utf8',
+  );
+  /**
+   * Comments stripped, because the first version of the assertion below passed
+   * against the docblock's own description of the flag while the flag itself
+   * had been deleted. A test that reads the prose is checking that someone
+   * wrote a sentence, which is the failure this whole repository is about.
+   */
+  const script = scriptRaw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+
+  it('captures with persist: false, which is the only reason it is safe to run', () => {
+    expect(script).toContain('persist: false');
+    // Both captures come from one call site, so one flag covers the pair.
+    expect(script.match(/measureServer\(/g) ?? []).toHaveLength(1);
+  });
+
+  it('declares only capabilities the harness can answer truthfully', () => {
+    // `sampling` would say this client can ask a model for a completion. It
+    // cannot, and a probe that lies to the server it measures is worthless.
+    const client = readFileSync(
+      join(import.meta.dirname, '..', 'src', 'sweep', 'client.ts'),
+      'utf8',
+    );
+    const posture = /export const DECLARING_POSTURE[\s\S]*?\n\};/.exec(client)![0];
+    expect(posture).toContain('roots');
+    expect(posture).toContain('elicitation');
+    expect(posture).not.toContain('sampling');
+    // Every declared capability has an answer beside it in the same object.
+    for (const method of ['roots/list', 'elicitation/create']) expect(posture).toContain(method);
+  });
+
+  it('runs read-only and holds no token, in a job that launches strangers commands', () => {
+    expect(probe).toMatch(/permissions:\n\s*contents: read/);
+    expect(probe).not.toMatch(/github\.token|GITHUB_TOKEN|secrets\./);
+    expect(probe).toMatch(/persist-credentials: false/);
+    expect(probe).not.toContain('git push');
+  });
+
+  it('leaves its answer where a reader can fetch it, rather than committing it', () => {
+    expect(probe).toContain('actions/upload-artifact');
+    expect(probe).not.toContain('git commit');
+  });
+});
+
+/**
  * The guard the two publishing jobs run in place of the CI run a bot push never
  * starts — and the ordering that decides whether it can ever pass.
  *
@@ -279,8 +346,13 @@ describe('the publishing jobs check the tree they are about to push', () => {
         expect(i, `${name} runs ${needle}`).toBeGreaterThan(-1);
         return i;
       };
-      expect(at('regen.ts'), `${name}: the suite reads a tree regen has not rebuilt`).toBeLessThan(at('npm test'));
-      expect(at('npm test'), `${name}: the suite cannot stop a push that happens first`).toBeLessThan(at('git push'));
+      expect(at('regen.ts'), `${name}: the suite reads a tree regen has not rebuilt`).toBeLessThan(
+        at('npm test'),
+      );
+      expect(
+        at('npm test'),
+        `${name}: the suite cannot stop a push that happens first`,
+      ).toBeLessThan(at('git push'));
     });
   }
 });
@@ -306,7 +378,15 @@ describe('the published composite action', () => {
   const script = action.runs.steps[0].run;
 
   it('passes every flag the gate needs, spelled as the CLI spells it', () => {
-    for (const flag of ['--name', '--command', '--remote', '--baseline', '--max-increase', '--budget', '--timeout']) {
+    for (const flag of [
+      '--name',
+      '--command',
+      '--remote',
+      '--baseline',
+      '--max-increase',
+      '--budget',
+      '--timeout',
+    ]) {
       expect(script, flag).toContain(flag);
     }
   });
@@ -321,13 +401,21 @@ describe('the published composite action', () => {
     // Inputs are untrusted text; `${{ }}` inside a run block would execute it.
     expect(script).not.toMatch(/\$\{\{/);
     for (const key of Object.keys(action.inputs)) {
-      const wired = Object.values(action.runs.steps[0].env).some((v) => v.includes(`inputs.${key}`) || v.includes(`inputs['${key}']`));
+      const wired = Object.values(action.runs.steps[0].env).some(
+        (v) => v.includes(`inputs.${key}`) || v.includes(`inputs['${key}']`),
+      );
       expect(wired, `input ${key} reaches the step through env`).toBe(true);
     }
   });
 
   it('declares the outputs a caller needs after the gate has run', () => {
-    expect(Object.keys(action.outputs).sort()).toEqual(['badge', 'measurement', 'status', 'tokens', 'tools']);
+    expect(Object.keys(action.outputs).toSorted()).toEqual([
+      'badge',
+      'measurement',
+      'status',
+      'tokens',
+      'tools',
+    ]);
   });
 });
 
@@ -338,7 +426,10 @@ describe('the published composite action', () => {
  * actually lives.
  */
 describe('release workflow', () => {
-  const release = readFileSync(join(import.meta.dirname, '..', '.github', 'workflows', 'release.yml'), 'utf8');
+  const release = readFileSync(
+    join(import.meta.dirname, '..', '.github', 'workflows', 'release.yml'),
+    'utf8',
+  );
   const at = (needle: string) => release.indexOf(needle);
 
   it('runs the readiness gate before it writes anything', () => {
@@ -378,9 +469,75 @@ describe('release workflow', () => {
     expect(release.slice(cd, verify)).not.toContain('\n      - name:');
   });
 
+  /**
+   * 0.17.0 published cleanly and then failed this step with `ETARGET`. The step
+   * waited on `npm view "<pkg>@$VERSION"`, which passed on its first attempt,
+   * and then ran `npx`, which could not resolve the same version seconds later.
+   * They read different documents: the registry serves a full packument to
+   * `Accept: application/json` and an abbreviated one to
+   * `application/vnd.npm.install-v1+json`, from one URL under
+   * `Vary: accept-encoding, accept` — separately cached, each with its own ETag
+   * and its own `max-age`. Waiting on either says nothing about the other, so
+   * the only wait worth having is around the command itself.
+   */
+  it('retries the command that resolves the tarball, not a proxy for it', () => {
+    // The npx invocation must sit INSIDE the retry loop. An earlier version of
+    // this test only asked that a `for … $(seq` appear somewhere between the
+    // temp-dir cd and the first `verify --remote`, which the bug it was written
+    // for walks straight through: put any probe in the loop, leave npx after
+    // `done`, and it passes. Banning the string `npm view` did not save it
+    // either — `npm info`, `npm show` and `npm v` are documented aliases for
+    // the same command, and `curl` is not even an alias. Position is the
+    // property; spelling is not.
+    const verify = release.indexOf('verify --remote');
+    const cd = release.lastIndexOf('cd "$(mktemp -d)"', verify);
+    expect(cd, 'the retried command must run from an empty directory').toBeGreaterThan(-1);
+    const loop = release.indexOf('$(seq ', cd);
+    const doAt = release.indexOf('; do', loop);
+    const doneAt = release.indexOf('\n          done', doAt);
+    expect(doAt, 'expected a bounded retry after the temp-dir cd').toBeGreaterThan(-1);
+    expect(doneAt).toBeGreaterThan(doAt);
+    expect(verify, 'the verify must be retried, not run once after the loop').toBeGreaterThan(doAt);
+    expect(verify, 'the verify must be retried, not run once after the loop').toBeLessThan(doneAt);
+  });
+
+  /**
+   * The loop this replaced had no guard after it: ten failed probes fell
+   * through with status 0 straight into the command they were meant to be
+   * waiting for. Verified against the old shape, where a wait that never
+   * succeeds still exits 0 and the step continues. Every bounded wait in this
+   * file has to say so out loud instead.
+   */
+  it('never falls through a bounded wait as though it had succeeded', () => {
+    const loops = release.split(/for \w+ in \$\(seq /).slice(1);
+    expect(loops.length, 'expected the waits this rule is about').toBeGreaterThan(1);
+    for (const rest of loops) {
+      const after = rest.slice(rest.indexOf('done') + 'done'.length);
+      // The guard must be the next thing that RUNS, not merely something within
+      // N characters of `done`. The first version of this looked at a 500-char
+      // window and went red when the comment above the guard grew — length is
+      // not the property, order is.
+      const nextCommand =
+        after
+          .split('\n')
+          .map((l) => l.trim())
+          .find((l) => l !== '' && !l.startsWith('#')) ?? '';
+      expect(
+        nextCommand,
+        'a wait that can exhaust must fail loudly, before anything else runs',
+      ).toMatch(/exit 1/);
+    }
+  });
+
+  it('says a failure here is not a rollback', () => {
+    // This step runs after the publish. Someone reading a red run must not go
+    // looking for a release that was undone; nothing here can undo one.
+    expect(release).toMatch(/RUNS AFTER THE PUBLISH/);
+  });
+
   it('has a dry run that stops before the first commit reaches main', () => {
     expect(at('Stop here on a dry run')).toBeLessThan(at('git push'));
-    expect(release).toContain("if: inputs.dry_run");
+    expect(release).toContain('if: inputs.dry_run');
   });
 
   it('cannot race another release', () => {
@@ -449,7 +606,10 @@ describe('every workflow that can push', () => {
   type Permissions = string | Record<string, string>;
   interface Workflow {
     permissions?: Permissions;
-    jobs: Record<string, { permissions?: Permissions; env?: Record<string, string>; steps: Step[] }>;
+    jobs: Record<
+      string,
+      { permissions?: Permissions; env?: Record<string, string>; steps: Step[] }
+    >;
   }
   /**
    * Whether a job's token can push. A missing `permissions:` block is not
@@ -462,15 +622,19 @@ describe('every workflow that can push', () => {
    * an explicit `contents: write`, and ci.yml, with no block and credentials
    * kept, was invisible to a rule that claims to cover the directory.
    */
-  const grants = (p?: Permissions) => (p === undefined ? true : typeof p === 'string' ? p === 'write-all' : p.contents === 'write');
-  const canPush = (wf: Workflow) => Object.values(wf.jobs).some((j) => grants(j.permissions ?? wf.permissions));
+  const grants = (p?: Permissions) =>
+    p === undefined ? true : typeof p === 'string' ? p === 'write-all' : p.contents === 'write';
+  const canPush = (wf: Workflow) =>
+    Object.values(wf.jobs).some((j) => grants(j.permissions ?? wf.permissions));
   const workflows = readdirSync(wfDir)
     .filter((f) => f.endsWith('.yml'))
     .map((f) => [f, parse(readFileSync(join(wfDir, f), 'utf8')) as Workflow] as const);
   const writers = workflows.filter(([, wf]) => canPush(wf));
 
-  const refersToToken = (v: unknown) => typeof v === 'string' && /github\.token|secrets\.GITHUB_TOKEN/.test(v);
-  const holdsToken = (env?: Record<string, unknown>) => Object.values(env ?? {}).some(refersToToken);
+  const refersToToken = (v: unknown) =>
+    typeof v === 'string' && /github\.token|secrets\.GITHUB_TOKEN/.test(v);
+  const holdsToken = (env?: Record<string, unknown>) =>
+    Object.values(env ?? {}).some(refersToToken);
 
   /**
    * A step that launches servers.yaml entries: the sweep, the full sweep, and
@@ -496,7 +660,9 @@ describe('every workflow that can push', () => {
     // checkout rule for a push it never makes — the fix is to declare, not to
     // exempt.
     for (const [file, wf] of workflows) {
-      const declared = wf.permissions !== undefined || Object.values(wf.jobs).every((j) => j.permissions !== undefined);
+      const declared =
+        wf.permissions !== undefined ||
+        Object.values(wf.jobs).every((j) => j.permissions !== undefined);
       expect(declared, `${file} declares what its token may do`).toBe(true);
     }
   });
@@ -507,7 +673,8 @@ describe('every workflow that can push', () => {
         .flatMap((j) => j.steps)
         .filter((s) => s.uses?.startsWith('actions/checkout'));
       expect(checkouts.length).toBeGreaterThan(0);
-      for (const s of checkouts) expect(s.with?.['persist-credentials'], `${file}: ${s.uses}`).toBe(false);
+      for (const s of checkouts)
+        expect(s.with?.['persist-credentials'], `${file}: ${s.uses}`).toBe(false);
     });
 
     it(`${file} hands the token to the push, and never to a launch command`, () => {
@@ -518,7 +685,11 @@ describe('every workflow that can push', () => {
       // launch step's process, and that edit would not fail a narrower check.
       const launches = jobs.some((j) => j.steps.some((s) => LAUNCH_STEP.test(s.run ?? '')));
       for (const job of jobs) {
-        if (launches) expect(holdsToken(job.env), `${file}: the job env holds the token in a workflow that launches servers`).toBe(false);
+        if (launches)
+          expect(
+            holdsToken(job.env),
+            `${file}: the job env holds the token in a workflow that launches servers`,
+          ).toBe(false);
         for (const s of job.steps) {
           const run = s.run ?? '';
           const label = s.name ?? s.uses ?? run;
@@ -528,10 +699,18 @@ describe('every workflow that can push', () => {
           if (/git push/.test(run)) {
             // The documented form: token on the command line, never written to
             // the remote's URL, so the tree carries nothing after the push.
-            expect(run).toMatch(/git push "https:\/\/x-access-token:\$\{GITHUB_TOKEN\}@github\.com\/\$\{GITHUB_REPOSITORY\}"/);
-            expect(s.env?.GITHUB_TOKEN, `${file}: push step "${label}" has no token to push with`).toBe('${{ github.token }}');
+            expect(run).toMatch(
+              /git push "https:\/\/x-access-token:\$\{GITHUB_TOKEN\}@github\.com\/\$\{GITHUB_REPOSITORY\}"/,
+            );
+            expect(
+              s.env?.GITHUB_TOKEN,
+              `${file}: push step "${label}" has no token to push with`,
+            ).toBe('${{ github.token }}');
           } else if (launches) {
-            expect(holdsToken(s.env) || holdsToken(s.with), `${file}: step "${label}" can see the token in a workflow that launches servers`).toBe(false);
+            expect(
+              holdsToken(s.env) || holdsToken(s.with),
+              `${file}: step "${label}" can see the token in a workflow that launches servers`,
+            ).toBe(false);
           }
         }
       }
@@ -558,105 +737,98 @@ describe('every workflow that can push', () => {
 });
 
 /**
- * The adoption reading is the one number the project keeps about itself, and
- * its date is most of its meaning. Every property here is only observable on
- * the first of a month, with nobody watching.
+ * The spec watch reads two public URLs and publishes nothing.
+ *
+ * Deliberately NOT modelled on the capability-probe block above, which asserts
+ * the blanket absence of any token: this job carries one on purpose, because
+ * the contents API allows 60 requests an hour per IP to an unauthenticated
+ * caller and Actions runners share addresses. So the assertions here are
+ * positive — what the token may do, where it is allowed to appear — rather than
+ * that it is absent.
  */
-describe('adoption workflow', () => {
-  const adoption = readFileSync(join(wfDir, 'adoption.yml'), 'utf8');
-  const runLines = (yaml: string) =>
-    yaml
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l.startsWith('run:'));
-  /** The five cron fields: minute, hour, day of month, month, day of week. */
-  const cronFields = (yaml: string) => /cron: '([^']*)'/.exec(yaml)![1].trim().split(/\s+/);
-  /** The document as Actions reads it — comments gone, which is the point for the checks below. */
+describe('spec revision watch', () => {
+  const specWatch = readFileSync(join(wfDir, 'spec-watch.yml'), 'utf8');
   interface Step {
-    name?: string;
+    uses?: string;
+    with?: Record<string, unknown>;
     run?: string;
     env?: Record<string, string>;
-    'continue-on-error'?: boolean;
   }
-  const doc = parse(adoption) as { jobs: Record<string, { steps: Step[] }> };
+  const doc = parse(specWatch) as {
+    on: Record<string, unknown>;
+    permissions?: Record<string, string>;
+    jobs: Record<string, { 'timeout-minutes'?: number; steps: Step[] }>;
+  };
   const steps = Object.values(doc.jobs).flatMap((j) => j.steps);
-  const reading = steps.find((s) => s.run === 'npm run adoption');
 
-  it('takes the reading with the Actions token and no repository secret', () => {
-    // The tool already falls back from MCP_CTX_GITHUB_TOKEN to GITHUB_TOKEN;
-    // wiring a secret in would be a second token to rotate for no reason.
-    expect(runLines(adoption).filter((l) => l.includes('npm run adoption')).length).toBe(1);
-    expect(reading?.env?.GITHUB_TOKEN).toBe('${{ github.token }}');
-    expect(JSON.stringify(doc)).not.toContain('secrets.');
-    expect(JSON.stringify(doc)).not.toContain('MCP_CTX_GITHUB_TOKEN');
-  });
-
-  it('never commits an unresolved reading', () => {
-    // The tool writes both files and THEN exits 1 when the count could not be
-    // established. A failing run step stops the job, so the commit step is
-    // only reached on a resolved reading — provided the reading step is not
-    // allowed to fail quietly and comes before the commit. The page date never
-    // advances without a count.
-    const tool = readFileSync(join(import.meta.dirname, '..', 'tools', 'measure-adoption.ts'), 'utf8');
-    expect(tool).toContain('process.exit(run.unresolved ? 1 : 0)');
-    expect(reading).toBeDefined();
-    expect(reading!['continue-on-error']).toBeUndefined();
-    expect(adoption.indexOf('npm run adoption')).toBeLessThan(adoption.indexOf('git commit'));
-  });
-
-  it('runs the suite before it commits, because a bot push starts no CI run', () => {
-    const test = adoption.indexOf('npm test');
-    expect(test).toBeGreaterThan(adoption.indexOf('npm run adoption'));
-    expect(test).toBeLessThan(adoption.indexOf('git commit'));
-  });
-
-  it('commits only the reading and the page rendered from it', () => {
-    // Regen does not produce docs/adoption.md and the README's sentence about
-    // adoption carries no number, so nothing else in the tree moves with it.
-    const adds = adoption
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l.startsWith('git add '));
-    expect(adds.length).toBeGreaterThan(0);
-    for (const l of adds) {
-      expect(l.slice('git add '.length).split(/\s+/).sort()).toEqual(['docs/adoption.md', 'results/badge-adoption.json']);
+  it('holds a token that can only read, and pushes nothing', () => {
+    expect(doc.permissions).toEqual({ contents: 'read' });
+    expect(specWatch).not.toContain('git push');
+    for (const s of steps.filter((x) => x.uses?.startsWith('actions/checkout'))) {
+      expect(s.with?.['persist-credentials']).toBe(false);
     }
-    expect(adoption).not.toContain('regen.ts');
   });
 
-  it('rebases before pushing', () => {
-    const rebase = adoption.indexOf('git pull --rebase origin main');
-    expect(rebase).toBeGreaterThan(adoption.indexOf('git commit'));
-    expect(rebase).toBeLessThan(adoption.indexOf('git push'));
+  it('passes the token through the environment and never through a command line', () => {
+    const watching = steps.find((s) => s.run?.includes('tools/watch-spec-revisions.ts'));
+    expect(watching?.env?.GITHUB_TOKEN).toBe('${{ github.token }}');
+    for (const s of steps) expect(s.run ?? '').not.toMatch(/github\.token/);
+    expect(JSON.stringify(doc)).not.toContain('secrets.');
   });
 
-  it('is scheduled by day of month, in an hour neither weekly pusher uses', () => {
-    // self-badge does not rebase, so a push racing it loses that week's badge;
-    // resweep can run for hours. The neighbours' hours are read from their
-    // ymls, the way dayOf does above, so moving one of them cannot leave this
-    // passing while saying nothing.
-    const [, hour, dayOfMonth, , dayOfWeek] = cronFields(adoption);
-    expect(dayOfMonth).not.toBe('*');
-    expect(dayOfWeek).toBe('*');
-    for (const other of [workflow, resweep]) expect(hour).not.toBe(cronFields(other)[1]);
+  /**
+   * Derived from both crons rather than restated: the watch is only worth
+   * having if a revision landing upstream is visible before the job that
+   * publishes measurements taken against the old pin.
+   */
+  it('runs before the sweep it protects', () => {
+    const slot = (yaml: string) => {
+      const [min, hour, , , day] = /cron: '([^']*)'/.exec(yaml)![1].trim().split(/\s+/);
+      return Number(day) * 24 * 60 + Number(hour) * 60 + Number(min);
+    };
+    expect(slot(specWatch)).toBeLessThan(slot(resweep));
   });
 
-  it('can be dispatched — that is how a reading is taken between slots', () => {
-    expect(adoption).toMatch(/^\s*workflow_dispatch:/m);
+  it('cannot hold a runner all day for two HTTP requests', () => {
+    for (const j of Object.values(doc.jobs)) {
+      expect(j['timeout-minutes']).toBeDefined();
+      expect(j['timeout-minutes']!).toBeLessThanOrEqual(15);
+    }
   });
 
-  it("has a budget of its own, because the tool's fetches carry none", () => {
-    // Bare `fetch` with no AbortSignal: a hung response would otherwise hold a
-    // write-token job for GitHub's default, which is hours. Smaller than the
-    // sweep's, which pays for cold installs; this pays for a few dozen API calls.
-    const budget = (yaml: string) => Number(/timeout-minutes: (\d+)/.exec(yaml)![1]);
-    expect(/timeout-minutes: (\d+)/.test(adoption)).toBe(true);
-    expect(budget(adoption)).toBeGreaterThan(0);
-    expect(budget(adoption)).toBeLessThan(budget(resweep));
+  it('is scheduled and dispatchable, and does not run on push or pull request', () => {
+    expect(Object.keys(doc.on).toSorted()).toEqual(['schedule', 'workflow_dispatch']);
+  });
+});
+
+describe('the negotiated-version probe answers a question without publishing one', () => {
+  const probe = readFileSync(join(wfDir, 'negotiated-versions.yml'), 'utf8');
+  const scriptRaw = readFileSync(
+    join(import.meta.dirname, '..', 'tools', 'negotiated-versions.ts'),
+    'utf8',
+  );
+  // Comments stripped, for the reason the capability-probe block above gives:
+  // a test that reads the prose is checking that someone wrote a sentence.
+  const script = scriptRaw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+
+  it('captures with persist: false, which is the only reason it is safe to run', () => {
+    expect(script).toContain('persist: false');
+    expect(script.match(/measureServer\(/g) ?? []).toHaveLength(1);
   });
 
-  it('holds contents: write and a concurrency group, like every job that pushes', () => {
-    expect(adoption).toMatch(/permissions:\n\s*contents: write/);
-    expect(adoption).toMatch(/concurrency:\n\s*group: adoption/);
+  it('writes no file at all, not even a summary', () => {
+    expect(script).not.toContain('writeFileSync');
+  });
+
+  it('runs read-only and holds no token, in a job that launches strangers commands', () => {
+    expect(probe).toMatch(/permissions:\n\s*contents: read/);
+    expect(probe).not.toMatch(/github\.token|GITHUB_TOKEN|secrets\./);
+    expect(probe).toContain('persist-credentials: false');
+    expect(probe).not.toContain('git push');
+  });
+
+  it('is dispatch-only, so nothing here runs on a schedule', () => {
+    const doc = parse(probe) as { on: Record<string, unknown> };
+    expect(Object.keys(doc.on)).toEqual(['workflow_dispatch']);
   });
 });

@@ -1,15 +1,15 @@
 /** Regenerate leaderboard + history + server pages + dashboard from results/: npx tsx src/sweep/regen.ts */
-import { readFileSync } from 'node:fs';
-import { parse } from 'yaml';
-import { writeLeaderboard, percentiles, type ServerEntry } from './report.js';
+import { writeLeaderboard, type ServerEntry } from './report.js';
 import { appendHistory } from './history.js';
 import { writeServerPages } from './server-pages.js';
 import { writeDashboard } from './dashboard.js';
 import { applyPublishedStats } from './published-stats.js';
 import { writeToolShapeBaseline } from './tool-shape.js';
 import { appendToolVectors, writeCaptureIndex, writeRegressions } from './regressions.js';
+import { loadServersDoc } from './servers-schema.js';
+import { signed } from '../core/format.js';
 
-const doc = parse(readFileSync('servers.yaml', 'utf8')) as { servers: ServerEntry[] };
+const doc = loadServersDoc() as { servers: ServerEntry[] };
 // History and tool vectors first: the server pages read history.csv for their
 // over-time table, and the leaderboard's movement note is derived from the same
 // series — generating it before the fold would describe the previous sweep.
@@ -31,18 +31,18 @@ const ts = writeToolShapeBaseline(doc.servers);
 // no longer maintain — refuse loudly rather than leave one number stale.
 const stats = applyPublishedStats(doc.servers);
 if (stats.problems.length > 0) {
-  for (const p of stats.problems) console.error(`published stats: ${p}`);
+  for (const problem of stats.problems) console.error(`published stats: ${problem}`);
   process.exit(1);
 }
-console.log('leaderboard:', JSON.stringify(percentiles(doc.servers)));
-console.log(`history: ${h.rows} rows (${h.added >= 0 ? '+' : ''}${h.added})`);
+console.log(`history: ${h.rows} rows (${signed(h.added)})`);
 console.log(`server pages: ${p.pages}`);
 console.log(`dashboard: ${d.out} (${(d.bytes / 1024).toFixed(0)}KB)`);
-console.log(`tool shape: ${ts.toolCount} tools across ${ts.serverCount} servers (median description ${ts.quantiles.descriptionTokens[50]})`);
+console.log(
+  `tool shape: ${ts.toolCount} tools across ${ts.serverCount} servers (median description ${ts.quantiles.descriptionTokens[50]})`,
+);
 console.log(
   `regressions: ${regressions.summary.changes.length} movement(s), ${regressions.summary.grew} heavier / ` +
-    `${regressions.summary.shrank} cheaper, net ${regressions.summary.netTokens >= 0 ? '+' : ''}` +
-    `${regressions.summary.netTokens} tokens; tool vectors ${tv.appended} appended across ${tv.servers} servers; ` +
+    `${regressions.summary.shrank} cheaper, net ${signed(regressions.summary.netTokens)} tokens; tool vectors ${tv.appended} appended across ${tv.servers} servers; ` +
     `capture index ${Object.keys(ci.captures).length} captures`,
 );
 console.log(

@@ -1,14 +1,16 @@
 # context7 — context cost
 
-**1,052 tokens** across 2 tools — *light* (1–5K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**1,052 tokens** across 2 tools — *light* (1–5K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
+
+An Anthropic request carries 985 of those tokens as tool definitions, and Claude counts those at **1,883**.
 
 | | |
 |---|---|
-| server (self-reported) | Context7 v4.0.4 |
+| server (self-reported) | Context7 v4.1.1 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y @upstash/context7-mcp` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | none |
 | canonical SHA-256 | `699d8b33d6d2d90ce7deb777994bb408e1e07bb08fa997042b7cce19e6c1ecec` |
 | category | vendor-official |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | resolve-library-id | 643 | 61.1% | 398 | 176 |
 | query-docs | 407 | 38.7% | 87 | 273 |
@@ -25,7 +27,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -42,6 +44,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-16 | 1,052 | 2 | not recorded | not recorded | — |
 | 2026-08-18 | 1,052 | 2 | not recorded | docker | no change |
 | 2026-09-04 | 1,052 | 2 | 4.0.4 | docker | no change |
+| 2026-09-16 | 1,052 | 2 | 4.1.1 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

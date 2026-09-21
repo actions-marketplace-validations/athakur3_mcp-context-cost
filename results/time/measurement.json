@@ -10,13 +10,17 @@
       "name": "get_current_time",
       "tokens": 105,
       "descriptionTokens": 7,
-      "inputSchemaTokens": 59
+      "inputSchemaTokens": 59,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 26
     },
     {
       "name": "convert_time",
       "tokens": 186,
       "descriptionTokens": 5,
-      "inputSchemaTokens": 143
+      "inputSchemaTokens": 143,
+      "outputSchemaTokens": 0,
+      "annotationsTokens": 26
     }
   ],
   "canonicalSha256": "7c6ff08840620894a66a103e02a8eb315013dd0a7d7c6cfb59b0fbe51f8a5d87",
@@ -76,17 +80,20 @@
       }
     }
   ],
-  "measuredAt": "2026-09-04T06:35:12.871Z",
+  "measuredAt": "2026-09-16T08:30:04.413Z",
   "serverName": "mcp-time",
-  "serverVersion": "1.29.1",
+  "serverVersion": "1.30.0",
   "launchCommand": "uvx --with \"mcp<2\" mcp-server-time",
   "envVarNames": [],
   "serverInstructions": null,
+  "negotiatedProtocolVersion": "2025-06-18",
   "isolation": {
     "docker": true,
     "image": "ghcr.io/astral-sh/uv:python3.12-bookworm-slim",
     "network": "bridge",
-    "note": "network enabled for package fetch; clean FS, no host credentials"
+    "note": "network enabled for package fetch; clean FS, no host credentials",
+    "arch": "linux/amd64"
   },
-  "timeoutMs": 240000
+  "timeoutMs": 240000,
+  "requestedProtocolVersion": "2025-06-18"
 }

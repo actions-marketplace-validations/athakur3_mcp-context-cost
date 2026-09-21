@@ -1,6 +1,8 @@
 # firecrawl — context cost
 
-**9,561 tokens** across 27 tools — *moderate* (5–15K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**9,561 tokens** across 27 tools — *moderate* (5–15K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
+
+An Anthropic request carries 8,869 of those tokens as tool definitions, and Claude counts those at **16,428**.
 
 | | |
 |---|---|
@@ -8,7 +10,7 @@
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y firecrawl-mcp` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | FIRECRAWL_API_KEY |
 | canonical SHA-256 | `3b7694bcedabac9706eba0c497c1fb4591121db0fd25e4e87e4802a001e34cd6` |
 | category | vendor-official |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | firecrawl_search | 1,391 | 14.5% | 261 | 1,082 |
 | firecrawl_crawl | 911 | 9.5% | 98 | 769 |
@@ -50,7 +52,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -69,6 +71,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-26 | 9,561 | 27 | not recorded | docker | no change |
 | 2026-09-03 | 9,561 | 27 | not recorded | docker | no change |
 | 2026-09-04 | 9,561 | 27 | 3.24.0 | docker | no change |
+| 2026-09-16 | 9,561 | 27 | 3.24.0 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

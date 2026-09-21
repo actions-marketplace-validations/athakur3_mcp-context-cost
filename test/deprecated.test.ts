@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { parse } from 'yaml';
 import { deprecationText, writeLeaderboard, type ServerEntry } from '../src/sweep/report.js';
 import type { Measurement } from '../src/core/types.js';
+import { measurement } from './factories.js';
 
 /**
  * A deprecation is a fact about the package, and the set holds both kinds of
@@ -15,21 +16,6 @@ import type { Measurement } from '../src/core/types.js';
  * registry says about the package.
  */
 const repoRoot = join(import.meta.dirname, '..');
-
-const measurement = (over: Partial<Measurement> = {}): Measurement => ({
-  methodologyVersion: '1.0',
-  provider: 'tiktoken',
-  encoding: 'o200k_base',
-  status: 'measured',
-  totalTokens: 374,
-  toolCount: 4,
-  tools: [{ name: 'search', tokens: 159, descriptionTokens: 30, inputSchemaTokens: 120 }],
-  canonicalSha256: 'a'.repeat(64),
-  rawToolsCapture: [],
-  measuredAt: '2026-09-04T06:00:00.000Z',
-  serverName: 'demo-server',
-  ...over,
-});
 
 describe('deprecationText', () => {
   it('says where upstream points, in upstream’s words', () => {
@@ -86,7 +72,15 @@ describe('the leaderboard publishes the deprecation beside the row', () => {
 
   it('lists a measured row and a failed row alike', () => {
     write('demo', measurement());
-    write('broken', measurement({ status: 'startup-failure', totalTokens: null, toolCount: null, notes: 'server exited (code 1)' }));
+    write(
+      'broken',
+      measurement({
+        status: 'startup-failure',
+        totalTokens: null,
+        toolCount: null,
+        notes: 'server exited (code 1)',
+      }),
+    );
     const entries: ServerEntry[] = [
       { name: 'demo', command: 'npx -y demo', deprecated },
       { name: 'broken', command: 'npx -y broken', deprecated },
@@ -106,16 +100,20 @@ describe('the leaderboard publishes the deprecation beside the row', () => {
   it('omits the section entirely when nothing is deprecated', () => {
     write('demo', measurement());
     writeLeaderboard([{ name: 'demo', command: 'npx -y demo' }], root);
-    expect(readFileSync(join(root, 'results', 'leaderboard.md'), 'utf8')).not.toContain('Deprecated upstream');
+    expect(readFileSync(join(root, 'results', 'leaderboard.md'), 'utf8')).not.toContain(
+      'Deprecated upstream',
+    );
   });
 });
 
 describe('the deprecations committed in servers.yaml', () => {
-  const doc = parse(readFileSync(join(repoRoot, 'servers.yaml'), 'utf8')) as { servers: ServerEntry[] };
+  const doc = parse(readFileSync(join(repoRoot, 'servers.yaml'), 'utf8')) as {
+    servers: ServerEntry[];
+  };
   const deprecated = doc.servers.filter((s) => s.deprecated);
 
   it('each carries the version, source and reading date its claim rests on', () => {
-    expect(deprecated.map((s) => s.name).sort()).toEqual(['elasticsearch', 'gdrive', 'neon']);
+    expect(deprecated.map((s) => s.name).toSorted()).toEqual(['elasticsearch', 'gdrive', 'neon']);
     for (const s of deprecated) {
       const d = s.deprecated!;
       expect(d.version.trim(), `${s.name} version`).not.toBe('');

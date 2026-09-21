@@ -2,13 +2,15 @@
 
 **724 tokens** across 2 tools — *lean* (< 1K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
 
+An Anthropic request carries 661 of those tokens as tool definitions, and Claude counts those at **1,322**.
+
 | | |
 |---|---|
 | server (self-reported) | ddg-search v1.29.1 |
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `uvx duckduckgo-mcp-server` |
-| isolation | docker · ghcr.io/astral-sh/uv:python3.12-bookworm-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · ghcr.io/astral-sh/uv:python3.12-bookworm-slim · network bridge · architecture not on record · network enabled for package fetch; clean FS, no host cred |
 | env vars supplied | none |
 | canonical SHA-256 | `61f82494284ccb413e9cb213ed93d7b79f43769229713b2748056a7f1018db14` |
 | category | community |
@@ -16,16 +18,16 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
-|---|---:|---:|---:|---:|
-| fetch_content | 387 | 53.5% | 246 | 88 |
-| search | 335 | 46.3% | 226 | 58 |
+| tool | tokens | share | description | input schema | output schema |
+|---|---:|---:|---:|---:|---:|
+| fetch_content | 387 | 53.5% | 246 | 88 | 29 |
+| search | 335 | 46.3% | 226 | 58 | 28 |
 
 Each tool is tokenized on its own, so the parts do not sum exactly to the whole: the array adds its own brackets and commas, and the tokenizer merges tokens across object boundaries. The badge number is always the count of the whole array, never a sum of parts.
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|

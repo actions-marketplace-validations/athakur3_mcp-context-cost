@@ -44,6 +44,7 @@ import {
 import { parseHistory, plottableSeries, type HistoryRow } from './history.js';
 import { mdCell, type ServerEntry } from './report.js';
 import type { Measurement } from '../core/types.js';
+import { count, signed, signedPct } from '../core/format.js';
 
 /** Fold every results/<server>/measurement.json into its tool-vectors.json. Idempotent. */
 export function appendToolVectors(root = process.cwd()): { servers: number; appended: number } {
@@ -55,7 +56,7 @@ export function appendToolVectors(root = process.cwd()): { servers: number; appe
   for (const server of readdirSync(resultsDir, { withFileTypes: true })
     .filter((d) => d.isDirectory())
     .map((d) => d.name)
-    .sort()) {
+    .toSorted()) {
     const file = join(resultsDir, server, 'measurement.json');
     if (!existsSync(file)) continue;
     let m: Measurement;
@@ -129,14 +130,16 @@ export function writeCaptureIndex(entries: ServerEntry[], root = process.cwd()):
   // release gate ask "is anything derived here stale?" and get a real answer.
   const newest = Object.values(captures)
     .map((c) => c.date)
-    .sort()
+    .toSorted()
     .pop();
   const index: CaptureIndex = {
     method: CAPTURE_INDEX_METHOD,
     generatedAt: newest ?? '',
     // Key order sorted so a re-run over unchanged vectors produces no diff noise.
-    captures: Object.fromEntries(Object.entries(captures).sort(([a], [b]) => a.localeCompare(b))),
-    current: Object.fromEntries(Object.entries(current).sort(([a], [b]) => a.localeCompare(b))),
+    captures: Object.fromEntries(
+      Object.entries(captures).toSorted(([a], [b]) => a.localeCompare(b)),
+    ),
+    current: Object.fromEntries(Object.entries(current).toSorted(([a], [b]) => a.localeCompare(b))),
   };
   writeFileSync(join(root, 'results', 'capture-index.json'), JSON.stringify(index, null, 2) + '\n');
   return index;
@@ -149,9 +152,7 @@ const MECHANISM_WORDS: Record<Mechanism, string> = {
   mixed: 'added and rewrote',
 };
 
-const n = (v: number) => v.toLocaleString('en-US');
-const signed = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${n(Math.abs(v))}`;
-const signedPct = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(1)}%`;
+const n = count;
 
 /** Compute every comparable movement on disk, newest-pair per server. */
 export function collectChanges(
@@ -182,7 +183,7 @@ export function collectChanges(
     else if (reading.kind === 'unchanged') unchanged.push(reading.held);
     else withoutComparison++;
   }
-  const newest = rows.map((r) => r.date).sort();
+  const newest = rows.map((r) => r.date).toSorted();
   return {
     summary: summarize(changes, withoutComparison, unchanged),
     measuredAt: newest[newest.length - 1] ?? '',

@@ -1,6 +1,8 @@
 # playwright-community — context cost
 
-**2,920 tokens** across 33 tools — *light* (1–5K). Measured 2026-09-04 under [methodology v1.0](../METHODOLOGY.html).
+**2,920 tokens** across 33 tools — *light* (1–5K). Measured 2026-09-16 under [methodology v1.0](../METHODOLOGY.html).
+
+An Anthropic request carries 2,920 of those tokens as tool definitions, and Claude counts those at **5,688**.
 
 | | |
 |---|---|
@@ -8,7 +10,7 @@
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y @executeautomation/playwright-mcp-server` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | none |
 | canonical SHA-256 | `4af7a9d131b4506471d83cc2d014ffc39b784a16ff181cce05ae2d9f26dbe9ff` |
 | category | community |
@@ -16,7 +18,7 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
+| tool | tokens | share | description | input schema |
 |---|---:|---:|---:|---:|
 | playwright_get_visible_html | 228 | 7.8% | 31 | 184 |
 | playwright_resize | 205 | 7.0% | 39 | 155 |
@@ -55,7 +57,7 @@ Each tool is tokenized on its own, so the parts do not sum exactly to the whole:
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -72,6 +74,7 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-08-16 | 2,920 | 33 | not recorded | not recorded | — |
 | 2026-08-19 | 2,920 | 33 | not recorded | docker | no change |
 | 2026-09-04 | 2,920 | 33 | 1.0.11 | docker | no change |
+| 2026-09-16 | 2,920 | 33 | 1.0.11 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

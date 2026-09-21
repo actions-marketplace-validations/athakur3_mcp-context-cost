@@ -10,8 +10,11 @@ import {
   compileTemplate,
   computePublishedStats,
   floorToTwoSignificant,
+  heaviestDroppedField,
   verifyPublishedPages,
 } from '../src/sweep/published-stats.js';
+import { countTokens } from '../src/core/canonical.js';
+import { isCurrent, mappedTokens } from '../src/core/divergence.js';
 import type { ServerEntry } from '../src/sweep/report.js';
 
 /**
@@ -29,7 +32,9 @@ import type { ServerEntry } from '../src/sweep/report.js';
  */
 
 const repoRoot = join(import.meta.dirname, '..');
-const entries = (parse(readFileSync(join(repoRoot, 'servers.yaml'), 'utf8')) as { servers: ServerEntry[] }).servers;
+const entries = (
+  parse(readFileSync(join(repoRoot, 'servers.yaml'), 'utf8')) as { servers: ServerEntry[] }
+).servers;
 const stats = computePublishedStats(entries, repoRoot);
 
 describe('published pages agree with the data on disk', () => {
@@ -66,12 +71,24 @@ describe('published pages agree with the data on disk', () => {
     // neighbour. The badge column now comes from the measurement, and the
     // Claude column is null exactly when the leaderboard prints `—`.
     const board = readFileSync(join(repoRoot, 'results', 'leaderboard.md'), 'utf8');
+    // Derived from the header, never a constant. This read was `[5]` while the
+    // claude column happened to sit there; inserting any column to its left
+    // would have moved the cell without moving the number, and the assertion
+    // would have gone on passing for the wrong reason.
+    const lines = board.split('\n');
+    const header = lines.find((l) => l.startsWith('| # | server |'))!;
+    const claudeCol = header.split('|').findIndex((c) => c.trim() === 'claude');
+    expect(claudeCol, 'no claude column in the leaderboard header').toBeGreaterThan(0);
     for (const name of ['github', 'notion'] as const) {
-      const row = board.split('\n').find((l) => l.includes(`| [${name}](`))!;
-      const boardShowsClaude = row.split('|')[5]?.trim() !== '—';
-      expect(stats.claude[name].claudeTokens === null, `${name}: README vs leaderboard`).toBe(!boardShowsClaude);
+      const row = lines.find((l) => l.includes(`| [${name}](`))!;
+      const boardShowsClaude = row.split('|')[claudeCol]?.trim() !== '—';
+      expect(stats.claude[name].claudeTokens === null, `${name}: README vs leaderboard`).toBe(
+        !boardShowsClaude,
+      );
       // And the badge column is the measured number, never the run's copy of it.
-      expect(stats.claude[name].badgeTokens).toBe(stats.sample[name]?.tokens ?? stats.claude[name].badgeTokens);
+      expect(stats.claude[name].badgeTokens).toBe(
+        stats.sample[name]?.tokens ?? stats.claude[name].badgeTokens,
+      );
     }
   });
 
@@ -84,7 +101,7 @@ describe('published pages agree with the data on disk', () => {
   });
 
   it('derives the numbers the pages state from the same rules the leaderboard uses', () => {
-    expect(Object.keys(stats.sample).sort()).toEqual([...SAMPLE_SERVERS].sort());
+    expect(Object.keys(stats.sample).toSorted()).toEqual(SAMPLE_SERVERS.toSorted());
     expect(stats.spanTimes).toBe(floorToTwoSignificant(stats.max.tokens / stats.min.tokens));
     expect(stats.max.tokens).toBeGreaterThan(stats.second.tokens);
     expect(stats.second.tokens).toBeGreaterThan(stats.min.tokens);
@@ -95,7 +112,11 @@ describe('published pages agree with the data on disk', () => {
 });
 
 describe('the patch engine', () => {
-  const claim = { file: 'README.md', id: 'unit', template: 'cost spans **{n}×**, from `{w}` at {n} tokens' } as const;
+  const claim = {
+    file: 'README.md',
+    id: 'unit',
+    template: 'cost spans **{n}×**, from `{w}` at {n} tokens',
+  } as const;
 
   it('matches a sentence across the line wraps prose actually has', () => {
     const wrapped = 'cost spans **1,700×**,\nfrom `postgres` at 32 tokens';
@@ -109,7 +130,9 @@ describe('the patch engine', () => {
   });
 
   it('reads a decimal as one slot', () => {
-    const m = [...'between 0.7% and **89.9%**'.matchAll(compileTemplate('between {f}% and **{f}%**'))];
+    const m = [
+      ...'between 0.7% and **89.9%**'.matchAll(compileTemplate('between {f}% and **{f}%**')),
+    ];
     expect(m).toHaveLength(1);
     expect(m[0].slice(1)).toEqual(['0.7', '89.9']);
   });
@@ -119,7 +142,9 @@ describe('the patch engine', () => {
     const applied = applyClaim(stale, claim, ['1,700', 'postgres', '32']);
     expect(applied.changed).toBe(true);
     expect(applied.problem).toBeNull();
-    expect(applied.text).toBe('lead-in\ncost spans **1,700×**,\nfrom `postgres` at 32 tokens\ntrail-out');
+    expect(applied.text).toBe(
+      'lead-in\ncost spans **1,700×**,\nfrom `postgres` at 32 tokens\ntrail-out',
+    );
   });
 
   it('reports agreement as no change at all', () => {
@@ -131,13 +156,18 @@ describe('the patch engine', () => {
   });
 
   it('refuses a page that dropped the sentence, naming the claim', () => {
-    const applied = applyClaim('a page about something else entirely', claim, ['1,700', 'postgres', '32']);
+    const applied = applyClaim('a page about something else entirely', claim, [
+      '1,700',
+      'postgres',
+      '32',
+    ]);
     expect(applied.changed).toBe(false);
     expect(applied.problem).toContain("'unit' not found");
   });
 
   it('refuses an ambiguous anchor rather than patching the wrong one', () => {
-    const twice = 'cost spans **9×**, from `a` at 1 tokens … cost spans **9×**, from `a` at 1 tokens';
+    const twice =
+      'cost spans **9×**, from `a` at 1 tokens … cost spans **9×**, from `a` at 1 tokens';
     const applied = applyClaim(twice, claim, ['1,700', 'postgres', '32']);
     expect(applied.changed).toBe(false);
     expect(applied.problem).toContain('matches 2 places');
@@ -152,10 +182,153 @@ describe('the patch engine', () => {
     expect(floorToTwoSignificant(7)).toBe(7);
   });
 
+  /**
+   * The sentence this feeds was hand-written and said most of github's capture
+   * was `annotations`/`outputSchema` metadata. github ships no `outputSchema`
+   * and 1.7% of annotations; the 78% being dropped was `icons`. A plausible
+   * claim nobody could have noticed going stale, so it is derived now.
+   */
+  describe('heaviestDroppedField', () => {
+    it('names the heaviest field an Anthropic request cannot carry, and its share', () => {
+      const capture = [
+        {
+          name: 'a',
+          description: 'd',
+          inputSchema: { type: 'object' },
+          icons: { big: 'x'.repeat(400) },
+        },
+        {
+          name: 'b',
+          description: 'd',
+          inputSchema: { type: 'object' },
+          annotations: { readOnlyHint: true },
+        },
+      ];
+      const total = countTokens(JSON.stringify(capture));
+      const got = heaviestDroppedField(capture, total);
+      expect(got.dropField).toBe('icons');
+      expect(got.dropSharePct).toBeGreaterThan(50);
+    });
+
+    it('never counts the three fields the request does carry', () => {
+      const capture = [
+        {
+          name: 'a',
+          description: 'x'.repeat(2000),
+          inputSchema: { type: 'object' },
+          icons: { s: 'y' },
+        },
+      ];
+      // The description dwarfs everything, and it is not dropped — so it must
+      // not be the answer.
+      expect(heaviestDroppedField(capture, countTokens(JSON.stringify(capture))).dropField).toBe(
+        'icons',
+      );
+    });
+
+    it('says none rather than guessing when a capture drops nothing', () => {
+      const capture = [{ name: 'a', description: 'd', inputSchema: { type: 'object' } }];
+      expect(heaviestDroppedField(capture, 50)).toEqual({ dropField: 'none', dropSharePct: 0 });
+      expect(heaviestDroppedField(null, 50).dropField).toBe('none');
+    });
+
+    it('breaks a tie on the field name, so the sentence does not flip between regenerations', () => {
+      const capture = [{ name: 'a', zzz: 'same', aaa: 'same' }];
+      expect(heaviestDroppedField(capture, 100).dropField).toBe('aaa');
+    });
+  });
+
   it('every claim template has as many slots as its values function returns', () => {
     for (const c of PAGE_CLAIMS) {
       const slots = [...c.template.matchAll(/\{[ndwfq]\}/g)].length;
       expect(c.values(stats), `claim '${c.id}'`).toHaveLength(slots);
+    }
+  });
+});
+
+/**
+ * The triple: one server as three numbers that are all true and mean different
+ * things. The rules that matter are which leg may be absent and where each one
+ * comes from, because both have already been got wrong on a published page —
+ * README printed 54,422 beside 54,622 for github when the wire number was read
+ * from a divergence row's copy instead of from the measurement.
+ */
+describe('the triple', () => {
+  const div = JSON.parse(readFileSync(join(repoRoot, 'results', 'divergence.json'), 'utf8')) as {
+    servers: Record<
+      string,
+      {
+        o200kFull: number;
+        o200kMapped: number;
+        claudeDelta: number;
+        toolCount: number;
+        capturedSha256: string;
+        error?: string;
+      }
+    >;
+  };
+  const measurement = (name: string) =>
+    JSON.parse(readFileSync(join(repoRoot, 'results', name, 'measurement.json'), 'utf8')) as {
+      totalTokens: number | null;
+      canonicalSha256: string | null;
+      rawToolsCapture: unknown[] | null;
+    };
+
+  /**
+   * The middle leg is recomputed from the capture rather than read out of the
+   * run, which is only safe while the two derivations agree. They are the same
+   * function on the same bytes — `tools/measure-divergence.ts` writes
+   * `o200kMapped: mappedTokens(m.rawToolsCapture)` — so this fires if either
+   * side is ever changed without the other, and it covers every row rather than
+   * the handful any page names.
+   */
+  it('recomputes every published o200kMapped exactly, so the mapped leg needs no run', () => {
+    const mismatched: string[] = [];
+    for (const [name, row] of Object.entries(div.servers)) {
+      const m = measurement(name);
+      // Only rows still describing the capture on disk can be expected to
+      // agree; a stale row was computed from bytes that are gone.
+      if (m.canonicalSha256 !== row.capturedSha256) continue;
+      const recomputed = mappedTokens(m.rawToolsCapture ?? []);
+      if (recomputed !== row.o200kMapped)
+        mismatched.push(`${name}: recomputed ${recomputed} vs published ${row.o200kMapped}`);
+    }
+    expect(mismatched, 'mappedTokens and results/divergence.json disagree').toEqual([]);
+  });
+
+  it("takes the wire leg from the measurement, never from the run's copy of it", () => {
+    for (const [name, t] of Object.entries(stats.triple)) {
+      expect(t.wire, `${name} wire`).toBe(measurement(name).totalTokens);
+    }
+  });
+
+  it('drops the Claude leg to null exactly when the row no longer describes the capture', () => {
+    for (const [name, t] of Object.entries(stats.triple)) {
+      const row = div.servers[name];
+      const current = isCurrent(row, measurement(name).canonicalSha256);
+      expect(t.claude === null, `${name}: claude leg vs isCurrent`).toBe(!current);
+      if (current) expect(t.claude).toBe(row.claudeDelta);
+    }
+  });
+
+  /**
+   * Why the gate is `isCurrent` and not a check on the number's shape. An
+   * errored row still carries a numeric `claudeDelta` — the literal `0` the
+   * divergence tool initialises it to — so `typeof d.claudeDelta === 'number'`
+   * would publish "0 tokens on Claude" about a server nobody has successfully
+   * counted. If this row ever stops looking like this, the reasoning behind the
+   * gate has changed and wants re-reading, not patching.
+   */
+  it('keeps a numeric zero on the one row whose Claude count errored', () => {
+    const errored = Object.entries(div.servers).filter(([, r]) => r.error);
+    expect(errored.map(([n]) => n)).toEqual(['gitlab']);
+    expect(typeof errored[0][1].claudeDelta).toBe('number');
+    expect(isCurrent(errored[0][1], measurement('gitlab').canonicalSha256)).toBe(false);
+  });
+
+  it('carries a triple for every server a page names', () => {
+    for (const name of [stats.max.name, stats.second.name, stats.min.name, ...SAMPLE_SERVERS]) {
+      expect(stats.triple[name], `no triple for ${name}`).toBeDefined();
     }
   });
 });

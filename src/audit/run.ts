@@ -16,7 +16,9 @@ import { DEFAULT_PROBE_TIMEOUT_MS, probeRemote, type RemoteProbe } from './remot
 import {
   configCandidates,
   loadConfigs,
+  withManagedMcpCandidate,
   loadSettingsSources,
+  managedDropInCandidates,
   settingsCandidates,
   type ConfiguredServer,
   type LoadedConfig,
@@ -36,80 +38,100 @@ export const DEFAULT_CAPTURE_INDEX_URL =
 
 export interface AuditOptions {
   /** Explicit config path(s); when empty, every known client location is tried. */
-  configPaths?: string[];
-  cwd?: string;
-  home?: string;
-  timeoutMs?: number;
-  concurrency?: number;
-  docker?: boolean;
-  contextWindow?: number;
-  budget?: number;
+  configPaths?: string[] | undefined;
+  cwd?: string | undefined;
+  home?: string | undefined;
+  timeoutMs?: number | undefined;
+  concurrency?: number | undefined;
+  docker?: boolean | undefined;
+  contextWindow?: number | undefined;
+  budget?: number | undefined;
   /** Join each measured server against the published Claude divergence run. */
-  claude?: boolean;
+  claude?: boolean | undefined;
   /** Override the divergence.json source — mainly for tests and self-hosted mirrors. */
-  divergenceUrl?: string;
+  divergenceUrl?: string | undefined;
   /** Place this config's tools in the published tool-shape distribution and advise where the data can. */
-  suggest?: boolean;
+  suggest?: boolean | undefined;
   /** Override the tool-shape.json source — mainly for tests and self-hosted mirrors. */
-  toolShapeUrl?: string;
+  toolShapeUrl?: string | undefined;
   /** Identify each server against the published capture history, by hash, and report what has moved. */
-  changed?: boolean;
+  changed?: boolean | undefined;
   /** Override the capture-index.json source — mainly for tests and self-hosted mirrors. */
-  captureIndexUrl?: string;
+  captureIndexUrl?: string | undefined;
   /**
    * The tool-search variables as this process's SHELL has them. Defaults to
    * this process's environment. Overridable so a test can state a machine
    * rather than inherit the one it runs on.
    */
-  env?: ToolSearchEnv;
+  env?: ToolSearchEnv | undefined;
   /**
    * The same variables as Claude Code's own settings files set them — the other
    * half of the answer, and the half a shell cannot show. Defaults to reading
    * those files off the machine being audited (`discoverSettings`).
    */
-  settings?: ToolSearchSource[];
+  settings?: ToolSearchSource[] | undefined;
   /**
    * What each remote endpoint said to an unauthenticated `initialize`, keyed
    * like `measureAll`'s map. `runAudit` probes them (`probeRemotes`); a test can
    * state the answers instead of reaching a network.
    */
-  remotes?: Map<string, RemoteProbe>;
-  onProgress?: (name: string, done: number, total: number) => void;
+  remotes?: Map<string, RemoteProbe> | undefined;
+  onProgress?: ((name: string, done: number, total: number) => void) | undefined;
 }
 
 /** Fetch and parse the published capture index. Never throws: a failure is a report problem, not a crash. */
-export async function fetchCaptureIndex(url: string): Promise<{ index: CaptureIndex | null; problem?: string }> {
+export async function fetchCaptureIndex(
+  url: string,
+): Promise<{ index: CaptureIndex | null; problem?: string }> {
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-    if (!res.ok) return { index: null, problem: `capture index: HTTP ${res.status} fetching ${url}` };
+    if (!res.ok)
+      return { index: null, problem: `capture index: HTTP ${res.status} fetching ${url}` };
     const index = parseCaptureIndex(await res.text());
     return index ? { index } : { index: null, problem: `capture index: malformed data at ${url}` };
   } catch (e) {
-    return { index: null, problem: `capture index: failed to fetch ${url}: ${(e as Error).message}` };
+    return {
+      index: null,
+      problem: `capture index: failed to fetch ${url}: ${(e as Error).message}`,
+    };
   }
 }
 
 /** Fetch and parse the published tool-shape baseline. Never throws: a failure is a report problem, not a crash. */
-export async function fetchToolShape(url: string): Promise<{ baseline: ToolShapeBaseline | null; problem?: string }> {
+export async function fetchToolShape(
+  url: string,
+): Promise<{ baseline: ToolShapeBaseline | null; problem?: string }> {
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-    if (!res.ok) return { baseline: null, problem: `tool shape: HTTP ${res.status} fetching ${url}` };
+    if (!res.ok)
+      return { baseline: null, problem: `tool shape: HTTP ${res.status} fetching ${url}` };
     const baseline = parseToolShapeBaseline(await res.text());
-    return baseline ? { baseline } : { baseline: null, problem: `tool shape: malformed data at ${url}` };
+    return baseline
+      ? { baseline }
+      : { baseline: null, problem: `tool shape: malformed data at ${url}` };
   } catch (e) {
-    return { baseline: null, problem: `tool shape: failed to fetch ${url}: ${(e as Error).message}` };
+    return {
+      baseline: null,
+      problem: `tool shape: failed to fetch ${url}: ${(e as Error).message}`,
+    };
   }
 }
 
 /** Fetch and parse the published divergence run. Never throws: a failure is a report problem, not a crash. */
-export async function fetchDivergence(url: string): Promise<{ run: DivergenceRun | null; problem?: string }> {
+export async function fetchDivergence(
+  url: string,
+): Promise<{ run: DivergenceRun | null; problem?: string }> {
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-    if (!res.ok) return { run: null, problem: `claude divergence: HTTP ${res.status} fetching ${url}` };
+    if (!res.ok)
+      return { run: null, problem: `claude divergence: HTTP ${res.status} fetching ${url}` };
     const run = parseDivergence(await res.text());
     return run ? { run } : { run: null, problem: `claude divergence: malformed data at ${url}` };
   } catch (e) {
-    return { run: null, problem: `claude divergence: failed to fetch ${url}: ${(e as Error).message}` };
+    return {
+      run: null,
+      problem: `claude divergence: failed to fetch ${url}: ${(e as Error).message}`,
+    };
   }
 }
 
@@ -119,7 +141,10 @@ export function discover(opts: AuditOptions = {}): LoadedConfig[] {
   const candidates =
     opts.configPaths && opts.configPaths.length
       ? opts.configPaths.map((path) => ({ client: 'explicit', path }))
-      : configCandidates({ home, cwd, platform: process.platform, appData: process.env.APPDATA });
+      : withManagedMcpCandidate(
+          configCandidates({ home, cwd, platform: process.platform, appData: process.env.APPDATA }),
+          process.platform,
+        );
   return loadConfigs(candidates, cwd);
 }
 
@@ -134,9 +159,20 @@ export function discover(opts: AuditOptions = {}): LoadedConfig[] {
 export function discoverSettings(opts: AuditOptions = {}): ToolSearchSource[] {
   const cwd = opts.cwd ?? process.cwd();
   const home = opts.home ?? homedir();
-  return loadSettingsSources(
-    settingsCandidates({ home, cwd, platform: process.platform, programData: process.env.ProgramData }),
-  );
+  const candidates = settingsCandidates({ home, cwd, platform: process.platform });
+  // The drop-ins are the managed file's own tier, so they belong beside it and
+  // above every other settings file — not appended at the end, where the
+  // precedence walk would let a user file outrank an organisation's policy.
+  const at = candidates.findIndex((c) => c.scope === 'managed-settings');
+  const all =
+    at < 0
+      ? candidates
+      : [
+          ...candidates.slice(0, at + 1),
+          ...managedDropInCandidates(candidates[at]!.path),
+          ...candidates.slice(at + 1),
+        ];
+  return loadSettingsSources(all);
 }
 
 /**
@@ -144,7 +180,10 @@ export function discoverSettings(opts: AuditOptions = {}): ToolSearchSource[] {
  * `initialize`, once each. This comes before any launch — remote.ts says why an
  * endpoint is asked before the bridge is pointed at it.
  */
-export async function probeRemotes(configs: LoadedConfig[], opts: AuditOptions = {}): Promise<Map<string, RemoteProbe>> {
+export async function probeRemotes(
+  configs: LoadedConfig[],
+  opts: AuditOptions = {},
+): Promise<Map<string, RemoteProbe>> {
   const unique = new Map<string, ConfiguredServer>();
   for (const cfg of configs) {
     for (const s of cfg.servers) {
@@ -171,7 +210,11 @@ export async function probeRemotes(configs: LoadedConfig[], opts: AuditOptions =
  * Both carry the entry's header values, as a stdio launch carries env values.
  * `display` carries the names only, and is the form a report may print.
  */
-export function bridgeLaunch(s: ConfiguredServer): { argv: string[]; command: string; display: string } {
+export function bridgeLaunch(s: ConfiguredServer): {
+  argv: string[];
+  command: string;
+  display: string;
+} {
   const url = s.url ?? '';
   const argv = ['npx', '-y', 'mcp-remote', url];
   const display = [...argv];
@@ -184,7 +227,8 @@ export function bridgeLaunch(s: ConfiguredServer): { argv: string[]; command: st
     argv.push('--header', `${k}: ${v}`);
     display.push('--header', k);
   }
-  const shellQuote = (a: string) => (/^[A-Za-z0-9_@%+=:,./-]+$/.test(a) ? a : `'${a.replace(/'/g, `'\\''`)}'`);
+  const shellQuote = (a: string) =>
+    /^[A-Za-z0-9_@%+=:,./-]+$/.test(a) ? a : `'${a.replace(/'/g, `'\\''`)}'`;
   return { argv, command: argv.map(shellQuote).join(' '), display: display.join(' ') };
 }
 
@@ -227,7 +271,9 @@ export async function measureAll(
     }
   };
 
-  await Promise.all(Array.from({ length: Math.max(1, Math.min(opts.concurrency ?? 3, total || 1)) }, worker));
+  await Promise.all(
+    Array.from({ length: Math.max(1, Math.min(opts.concurrency ?? 3, total || 1)) }, worker),
+  );
   return measured;
 }
 

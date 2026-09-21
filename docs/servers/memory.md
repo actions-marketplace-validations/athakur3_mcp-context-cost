@@ -1,6 +1,8 @@
 # memory — context cost
 
-**2,378 tokens** across 9 tools — *light* (1–5K). Measured 2026-09-05 under [methodology v1.0](../METHODOLOGY.html).
+**2,378 tokens** across 9 tools — *light* (1–5K). Measured 2026-09-21 under [methodology v1.0](../METHODOLOGY.html).
+
+An Anthropic request carries 901 of those tokens as tool definitions, and Claude counts those at **1,880**.
 
 | | |
 |---|---|
@@ -8,7 +10,7 @@
 | status | measured |
 | tokenizer | tiktoken / o200k_base |
 | launch command | `npx -y @modelcontextprotocol/server-memory@2026.7.4` |
-| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · network enabled for package fetch; clean FS, no host credentials |
+| isolation | docker · public.ecr.aws/docker/library/node:22-slim · network bridge · linux/amd64 · network enabled for package fetch; clean FS, no host credentials |
 | env vars supplied | none |
 | canonical SHA-256 | `d028274f76dc9aa2e622ae02a17ce313aa65d7b5935254ca53889d4094238abb` |
 | category | official-reference |
@@ -16,23 +18,23 @@
 
 ## Where the tokens are
 
-| tool | tokens | share | description | schema |
-|---|---:|---:|---:|---:|
-| search_nodes | 323 | 13.6% | 11 | 51 |
-| open_nodes | 322 | 13.5% | 10 | 51 |
-| create_entities | 294 | 12.4% | 8 | 111 |
-| create_relations | 294 | 12.4% | 17 | 106 |
-| read_graph | 291 | 12.2% | 5 | 24 |
-| add_observations | 249 | 10.5% | 10 | 97 |
-| delete_relations | 225 | 9.5% | 7 | 115 |
-| delete_observations | 212 | 8.9% | 9 | 98 |
-| delete_entities | 166 | 7.0% | 11 | 53 |
+| tool | tokens | share | description | input schema | output schema |
+|---|---:|---:|---:|---:|---:|
+| search_nodes | 323 | 13.6% | 11 | 51 | 207 |
+| open_nodes | 322 | 13.5% | 10 | 51 | 207 |
+| create_entities | 294 | 12.4% | 8 | 111 | 121 |
+| create_relations | 294 | 12.4% | 17 | 106 | 116 |
+| read_graph | 291 | 12.2% | 5 | 24 | 207 |
+| add_observations | 249 | 10.5% | 10 | 97 | 85 |
+| delete_relations | 225 | 9.5% | 7 | 115 | 48 |
+| delete_observations | 212 | 8.9% | 9 | 98 | 48 |
+| delete_entities | 166 | 7.0% | 11 | 53 | 48 |
 
 Each tool is tokenized on its own, so the parts do not sum exactly to the whole: the array adds its own brackets and commas, and the tokenizer merges tokens across object boundaries. The badge number is always the count of the whole array, never a sum of parts.
 
 ## What this costs on Claude
 
-Measured 2026-09-05 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
+Measured 2026-09-14 against `claude-opus-5` via Anthropic's `count_tokens` (method `tools-delta/v1`).
 
 | | tokens | |
 |---|---:|---|
@@ -55,6 +57,9 @@ An Anthropic tool definition carries `name`, `description`, and `input_schema` a
 | 2026-09-03 | 2,378 | 9 | not recorded | docker | no change |
 | 2026-09-04 | 2,378 | 9 | 0.6.3 | docker | no change |
 | 2026-09-05 | 2,378 | 9 | 0.6.3 | docker | no change |
+| 2026-09-07 | 2,378 | 9 | 0.6.3 | docker | no change |
+| 2026-09-14 | 2,378 | 9 | 0.6.3 | docker | no change |
+| 2026-09-21 | 2,378 | 9 | 0.6.3 | docker | no change |
 
 > Some of these sweeps predate the `isolation` column, so the conditions they were measured under are not on record.
 

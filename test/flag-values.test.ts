@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { flagValue, flagValues, knownFlagNames, unknownFlags, valuelessFlags } from '../src/cli.js';
+import {
+  flagValue,
+  flagValues,
+  knownFlagNames,
+  unknownFlags,
+  valuelessFlags,
+} from '../src/flags.js';
 
 /**
  * A flag the CLI cannot read is a flag the CLI silently ignores, and an ignored
@@ -38,7 +44,10 @@ describe('flagValues — both accepted spellings', () => {
   });
 
   it('collects every occurrence for repeatable flags, in order, in either form', () => {
-    expect(flagValues(['--config', 'a.json', '--config=b.json'], 'config')).toEqual(['a.json', 'b.json']);
+    expect(flagValues(['--config', 'a.json', '--config=b.json'], 'config')).toEqual([
+      'a.json',
+      'b.json',
+    ]);
     // A single reader takes the last, matching the previous behaviour.
     expect(flagValue(['--config', 'a.json', '--config=b.json'], 'config')).toBe('b.json');
   });
@@ -46,7 +55,9 @@ describe('flagValues — both accepted spellings', () => {
 
 describe('valuelessFlags — a flag without its value is a usage error', () => {
   it('catches a value flag as the last argument', () => {
-    expect(valuelessFlags(['--baseline', 'b.json', '--max-increase'], SPEC)).toEqual(['--max-increase']);
+    expect(valuelessFlags(['--baseline', 'b.json', '--max-increase'], SPEC)).toEqual([
+      '--max-increase',
+    ]);
   });
 
   it('catches a value flag followed by another flag', () => {
